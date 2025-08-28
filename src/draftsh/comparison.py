@@ -17,8 +17,11 @@ from pymatgen.core.composition import Composition
 
 from draftsh.dataset import XlsxDataset, BaseDataset
 
-class XuDataset(XlsxDataset):
-    """reproduce dataset of Xu et al. 2025."""
+class XuTestHEA(XlsxDataset):
+    """reproduce test HEA set of Xu et al. 2025.
+    
+    see supple. Table 1
+    """
     def __init__(self):
         with resources.as_file(resources.files("draftsh.data.miscs") /"xu2025_validation_HEAs.xlsx") as path:
             xls_path = path
@@ -36,9 +39,15 @@ class XuDataset(XlsxDataset):
         self.dataframe["elements_fraction"]=frac_list
 
 class StanevSuperCon(BaseDataset):
-    """load processed SuperCon csv from Stanev et al. 2018"""
-    def __init__(self, drop_cols = None, exception_col = None):
+    """load processed SuperCon csv from Stanev et al. 2018
+
+    preprocess:
+        * see `src\draftsh\data\miscs\preprocess_supercon.py`
+        * note that Tc_upper_bound is hard coded, because it is close to the 5213 entries of xu et al
+    """
+    def __init__(self, drop_cols = None, exception_col = None, maxlen: int | None = None):
         super().__init__(data_path=None, drop_cols=drop_cols, exception_col=exception_col)
+        self.maxlen = maxlen
         self.load_data()
         elem_list=[]
         frac_list=[]
@@ -58,11 +67,16 @@ class StanevSuperCon(BaseDataset):
         self.dataframe = self.dataframe.drop(index=drop_rows, axis=0)
         self.dataframe["elements"]=elem_list
         self.dataframe["elements_fraction"]=frac_list
-        self.dataframe: pd.DataFrame = self.dataframe.reset_index()
+        self.dataframe: pd.DataFrame = self.dataframe.reset_index(drop=True)
         
     def load_data(self):
-        with resources.as_file(resources.files("draftsh.data.miscs") /"Supercon_data.csv") as path:
-            self.dataframe = pd.read_csv(path)
+        with resources.as_file(resources.files("draftsh.data.miscs") /"preprocessed_supercon.csv") as path:
+            self.dataframe = pd.read_csv(path, nrows = self.maxlen)
         return self.dataframe
         
-#%%
+class XuDataset():
+    """Reproduced XuDataset
+
+    1. Data collection and cleaning
+    """
+    pass

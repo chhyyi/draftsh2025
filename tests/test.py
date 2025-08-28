@@ -22,7 +22,7 @@ from sklearn.metrics import r2_score
 
 from draftsh.dataset import Dataset
 from draftsh.feature import Featurizer
-from draftsh.comparison import XuDataset
+from draftsh.comparison import XuTestHEA
 
 class Test(unittest.TestCase):
     """Test core class methods"""
@@ -49,7 +49,7 @@ class Test(unittest.TestCase):
 
     #def xu_val_r2score(self):
     #    """test XuDataset reproduces the snapshot"""
-        xu_dataset = XuDataset()
+        xu_dataset = XuTestHEA()
         r2score = r2_score(xu_dataset.dataframe["Experimental_T_c(K)"], xu_dataset.dataframe["Predicted_T_c(K)"])
         print(f"r2_score:{r2score}")
         self.assertAlmostEqual(r2score, 0.9246, places=4)

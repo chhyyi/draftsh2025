@@ -1,0 +1,142 @@
+{
+    "sources": [
+        "matminer",
+        "xu_eight"
+    ],
+    "matminer": [
+        {
+            "src": "magpie",
+            "unweighted": [
+                "uwd",
+                "wd"
+            ],
+            "feature": [
+                "Column",
+                "Row",
+                "CovalentRadius",
+                "Electronegativity",
+                "NsValence",
+                "NpValence",
+                "NdValence",
+                "NfValence",
+                "NValence",
+                "NsUnfilled",
+                "NpUnfilled",
+                "NdUnfilled",
+                "NfUnfilled",
+                "NUnfilled",
+                "FirstIonizationEnergy",
+                "GSestBCClatcnt",
+                "GSvolume_pa",
+                "SpaceGroupNumber"
+            ],
+            "stat": [
+                "minimum",
+                "maximum",
+                "range",
+                "ap_mean",
+                "ap_minimum",
+                "ap_maximum",
+                "ap_range"
+            ]
+        },
+        {
+        "src": "magpie",
+            "unweighted": [
+                "wd"
+            ],
+            "feature": [
+                "Column",
+                "Row",
+                "CovalentRadius",
+                "Electronegativity",
+                "NsValence",
+                "NpValence",
+                "NdValence",
+                "NfValence",
+                "NValence",
+                "NsUnfilled",
+                "NpUnfilled",
+                "NdUnfilled",
+                "NfUnfilled",
+                "NUnfilled",
+                "FirstIonizationEnergy",
+                "GSestBCClatcnt",
+                "GSvolume_pa",
+                "SpaceGroupNumber"
+            ],
+            "stat": [
+                "mean",
+                "avg_dev",
+                "mae"
+            ]
+        },
+        {
+            "src": "pymatgen",
+            "feature": [
+                "thermal_conductivity"
+            ],
+            "stat": [
+                "minimum",
+                "maximum",
+                "range",
+                "ap_mean",
+                "ap_minimum",
+                "ap_maximum",
+                "ap_range"
+            ],
+            "unweighted": [
+                "uwd",
+                "wd"
+            ]
+        },
+        {
+            "src": "pymatgen",
+            "feature": [
+                "thermal_conductivity"
+            ],
+            "stat": [
+                "mean",
+                "std_dev",
+                "mae"
+            ],
+            "unweighted": [
+                "wd"
+            ]
+        },
+        {
+            "src": "bccfermi",
+            "feature": [
+                "bccfermi"
+            ],
+            "stat": [
+                "minimum",
+                "maximum",
+                "range",
+                "ap_mean",
+                "ap_minimum",
+                "ap_maximum",
+                "ap_range"
+            ],
+            "unweighted": [
+                "uwd",
+                "wd"
+            ]
+        },
+                {
+            "src": "bccfermi",
+            "feature": [
+                "bccfermi"
+            ],
+            "stat": [
+                "mean",
+                "std_dev",
+                "mae"
+            ],
+            "unweighted": [
+                "wd"
+            ]
+        }
+    ],
+    "xu_eight": true
+}

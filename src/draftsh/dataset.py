@@ -14,6 +14,7 @@ from draftsh.parsers import CellParser, FracParser, ElemParser, process_targets
 from draftsh.utils import config_parser
 from draftsh.feature import Featurizer
 
+from matminer.featurizers.composition import ElementProperty
 
 #from matminer.featurizers.composition import composite
 
@@ -55,7 +56,7 @@ class BaseDataset(ABC):
     def pymatgen_comps(self) -> pd.Series:
         comps_pymatgen = []
         for _, row in self.dataframe.iterrows():
-            assert pd.isna(row["Exceptions"])
+            #assert pd.isna(row["Exceptions"])
             rep_chem_comp=""
 
             for elem, frac in zip(row["elements"], row["elements_fraction"]):
@@ -153,7 +154,67 @@ class Dataset(XlsxDataset):
     def featurize_and_split(self, featurizer: Featurizer, test_size: float = 0.2, shuffle: bool = True, seed: int = 42, to_numpy: bool = False) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         target_df = process_targets(self.dataframe, targets = self.config["targets"])
         featurized_df = featurizer.featurize(self.dataframe)
-        # merge featurized_df and target_df
+        # featurized_df and target_df
+        featurized_df = featurized_df.reset_index(drop=True)
+        target_df = target_df.reset_index(drop=True)
+        assert len(featurized_df) == len(target_df)
+
+        #shuffle, split.
+        N = len(featurized_df)
+        tr_idx, te_idx = train_test_split(
+            np.arange(N),
+            test_size=test_size,
+            random_state=seed,
+            shuffle=shuffle,
+        )
+        if to_numpy:
+            return (featurized_df.loc[tr_idx].to_numpy(),
+                    target_df.loc[tr_idx].to_numpy(),
+                    featurized_df.loc[te_idx].to_numpy(),
+                    target_df.loc[te_idx].to_numpy())
+        else:
+            return (featurized_df.loc[tr_idx],
+                    target_df.loc[tr_idx],
+                    featurized_df.loc[te_idx],
+                    target_df.loc[te_idx])
+
+class DLDataset(BaseDataset):
+    """
+    mostly copy of XlsxDataset and Dataset. should refactor 
+    """
+    def __init__(self, data_path: Path | str, drop_cols: list[str] | None = None):
+        if isinstance(data_path, str):
+            data_path = Path(data_path)
+        assert data_path.is_absolute(), f"data_path: {data_path} should be absolute"
+        super().__init__(data_path, drop_cols, exception_col = None)
+        df = self.load_data()
+        self.dataframe: pd.DataFrame = df.reset_index(drop=True)
+        self.parse_elements_col()
+        self.parse_frac_col()
+        self.elemental_set: set = self.elemental_stats()        
+        self.pymatgen_comps()
+
+
+    def load_data(self) -> pd.DataFrame:
+        return pd.read_excel(self.dset_path, index_col=0) 
+
+    def parse_elements_col(self, colname: str="elements"):
+        """parse string of xlsx cell with elements in list form"""
+        cell_parser = ElemParser()
+        return self.parse_col(colname, cell_parser, False)
+
+    def parse_frac_col(self, colname: str="elements_fraction"):
+        """parse string of xlsx cell with fractions in list form"""
+        cell_parser = FracParser()
+        return self.parse_col(colname, cell_parser, False)
+    
+    def featurize_and_split(self, test_size: float = 0.2, shuffle: bool = True, seed: int = 42, to_numpy: bool = False) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        config = {"targets": ["max_Tc"]}
+        target_df = process_targets(self.dataframe, targets = config["targets"], exception_row=None)
+        featurizer = ElementProperty.from_preset("magpie", impute_nan=True)
+        featurized_df = featurizer.featurize_dataframe(self.dataframe, col_id='comps_pymatgen', ignore_errors=True)
+        
+        # featurized_df and target_df
         featurized_df = featurized_df.reset_index(drop=True)
         target_df = target_df.reset_index(drop=True)
         assert len(featurized_df) == len(target_df)

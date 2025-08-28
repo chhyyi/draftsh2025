@@ -1,1 +1,0 @@
-[{"src": "magpie", "feature": ["Column", "Row", "CovalentRadius", "Electronegativity", "FirstIonizationEnergy", "GSestBCClatcnt", "NValence", "GSvolume_pa", "SpaceGroupNumber"], "stat": ["minimum", "maximum", "range", "mean", "avg_dev"]}, {"src": "pymatgen", "feature": ["thermal_conductivity"], "stat": ["minimum", "maximum", "range", "mean", "std_dev"]}]
