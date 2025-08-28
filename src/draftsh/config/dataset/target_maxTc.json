@@ -1,0 +1,5 @@
+{
+    "targets": ["max_Tc"],
+    "sheetname": "DataTable",
+    "drop_cols": ["idx", "idx_0625"]
+}
