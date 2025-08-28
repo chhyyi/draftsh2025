@@ -72,9 +72,6 @@ for `draftsh.Featurizer()`:
 
 ## Example Notebooks
 example colab notebooks.
-* [example_notebook.ipynb]()
+* [draftsh_test.ipynb](https://colab.research.google.com/drive/1xPBWykbPfkP2sLNI8z78uxi3i7vvs89t?usp=sharing)
     * Load in-house dataset
     * get featurized array for ML
-    * Simple ML model training
-* [comparison2Xu]()
-    * Compare prediction results with [Xu et al. (2025)](https://journal.hep.com.cn/fop/EN/10.15302/frontphys.2025.014205)

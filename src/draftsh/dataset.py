@@ -113,7 +113,7 @@ class XlsxDataset(BaseDataset):
             df = df[df[exception_col].apply(pd.isna)]
         else:
             pass
-        self.dataframe: pd.DataFrame = df.reset_index()
+        self.dataframe: pd.DataFrame = df.reset_index(drop=True)
 
     def load_data(self) -> pd.DataFrame:
         df = pd.read_excel(self.dset_path, sheet_name=self.sheet, nrows=self.maxlen)
