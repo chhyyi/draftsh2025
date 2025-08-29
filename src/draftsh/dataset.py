@@ -9,12 +9,12 @@ import numpy as np
 from pymatgen.core.composition import Composition
 from pymatgen.core.periodic_table import Element
 from sklearn.model_selection import train_test_split
+from matminer.featurizers.composition import ElementProperty
 
 from draftsh.parsers import CellParser, FracParser, ElemParser, process_targets
 from draftsh.utils import config_parser
 from draftsh.feature import Featurizer
 
-from matminer.featurizers.composition import ElementProperty
 
 #from matminer.featurizers.composition import composite
 
