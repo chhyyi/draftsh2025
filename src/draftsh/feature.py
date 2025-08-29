@@ -10,12 +10,13 @@ main functions:
 
 Todo:
     * ap_weights rule?
+    * if np.isnan(out):
 """
 
 import re
 import math
 from pathlib import Path
-
+import importlib.resources as resources
 
 import numpy as np
 import pandas as pd
@@ -24,6 +25,7 @@ from matminer.featurizers.composition import ElementProperty
 from matminer.featurizers.utils.stats import PropertyStats
 
 from draftsh.utils import config_parser
+import warnings
 
 # functions to generate 8/909 descriptors of xu 2025
 def mixing_entropy_per_r(fractions):
@@ -34,17 +36,17 @@ def mixing_entropy_per_r(fractions):
     arr = np.array(fractions, dtype=float)
     return -np.sum(arr * np.log(arr))
 
-def val_electron_occupation(test_comp):
+def val_electron_occupation(test_comp, impute_nan: bool = True):
     """
     occupation state of valence electron
     """
     orbs = ["NsValence", "NpValence", "NdValence", "NfValence",]
-    occu4orbits=ElementProperty(data_source="magpie", features = orbs, stats=["mean"], impute_nan=False)
-    n_valence=ElementProperty(data_source="magpie", features = ["NValence"], stats=["mean"], impute_nan=False)
+    occu4orbits=ElementProperty(data_source="magpie", features = orbs, stats=["mean"], impute_nan=impute_nan)
+    n_valence=ElementProperty(data_source="magpie", features = ["NValence"], stats=["mean"], impute_nan=impute_nan)
     return np.array(occu4orbits.featurize(comp=test_comp))/np.array(n_valence.featurize(comp=test_comp))
 
-def ionicity(test_comp):
-  prop=ElementProperty(data_source="deml", features = ["electronegativity",], stats=["mean", "maximum"], impute_nan=True) #for unidentified reason, nan masked(from pandas) inputed with valid floating numbers
+def ionicity(test_comp, impute_nan: bool = True):
+  prop=ElementProperty(data_source="deml", features = ["electronegativity",], stats=["mean", "maximum"], impute_nan=impute_nan) #for unidentified reason, nan masked(from pandas) inputed with valid floating numbers
 
   mean_ene, max_ene = prop.featurize(test_comp)
   elems, fracs = zip(*test_comp.element_composition.items())
@@ -114,6 +116,78 @@ def parse_value_with_uncertainty(s: str):
 
     return {"mean":float(mean), "std": float(std)}
 
+class MyElementProperty(ElementProperty):
+    """
+    def featurize_uw to 'unweight'.
+    """
+    def __init__(self, data_source, features, stats, impute_nan=False, unweight: bool = False):
+        super().__init__(data_source, features, stats, impute_nan)
+        self.unweight = unweight
+        self.pstats = MyPropertyStats() #override
+    
+    def featurize_uw(self, comp, unweighted: bool):
+        """
+        if unweight, `fractions = None`
+        mostly copy of ElementryProperty.featurize
+        """
+        if unweighted:
+            all_attributes = []
+            elements, _ = zip(*comp.element_composition.items())
+
+            for attr in self.features:
+                if isinstance(self.data_source, str) and self.data_source=="bccfermi": # for bccfermi (later for other features):
+                    elem_data = [self.bccfermi(e) for e in elements]
+                else:
+                    elem_data = [self.data_source.get_elemental_property(e, attr) for e in elements]
+
+                for stat in self.stats:
+                    all_attributes.append(self.pstats.calc_stat(elem_data, stat, weights=None))
+
+            return all_attributes
+        else:
+            if isinstance(self.data_source, str) and self.data_source=="bccfermi": # for bccfermi (later for other features):
+                all_attributes = []
+                elements, _ = zip(*comp.element_composition.items())
+
+                elem_data = [self.bccfermi(e) for e in elements]
+                for stat in self.stats:
+                    all_attributes.append(self.pstats.calc_stat(elem_data, stat, weights=None))
+                return all_attributes
+            else:
+                return self.featurize(comp)
+    
+    def bccfermi(self, e):
+        """featurize_bccfermi
+
+        License: MIT License
+        """
+        license_docs = """License: MIT License
+
+            Copyright (c) 2019 UW-Madison Computational Materials Group
+
+            Permission is hereby granted, free of charge, to any person obtaining a copy
+            of this software and associated documentation files (the "Software"), to deal
+            in the Software without restriction, including without limitation the rights
+            to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+            copies of the Software, and to permit persons to whom the Software is
+            furnished to do so, subject to the following conditions:
+
+            The above copyright notice and this permission notice shall be included in all
+            copies or substantial portions of the Software.
+
+            THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+            IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+            FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+            AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+            LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+            OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+            SOFTWARE."""
+        warnings.warn(f"accessing [mast-ml](https://github.com/uw-cmg/MAST-ML) files, with LICENSE:\n{self.__doc__}", UserWarning)
+        with resources.as_file(resources.files("draftsh.data.miscs") /"BCCfermi.csv") as path:
+            csv_path = path
+        supercon_preprocessed = pd.read_csv(csv_path)
+        supercon_dict = supercon_preprocessed.set_index("element").to_dict()['BCCfermi']
+        return supercon_dict.get(e.symbol)
 
 class Featurizer():
     """featurizer for in-house dataset
@@ -147,13 +221,23 @@ class Featurizer():
         # init matminer configs
         if "matminer" in self.config["sources"]:
             assert self.config["matminer"]
-            num_matminer_features = sum([len(src["feature"])*len(src["stat"])\
-                                for src in self.config["matminer"]])
+            num_matminer_features = 0
             self.matminer_col_names = []
-            for src in self.config["matminer"]:
-                for feat in src["feature"]:
-                    for stat in src["stat"]:
-                        self.matminer_col_names.append(f"{feat}_{stat}")
+            for srcc in self.config["matminer"]:
+                num_matminer_features += len(srcc["feature"])\
+                    *len(srcc["stat"])*len(srcc.get('unweighted', ["wd"]))
+                
+            for srcc in self.config["matminer"]:
+                for uw in list(srcc.get("unweighted", ["wd"])):
+                    for feat in srcc["feature"]:
+                        for stat in srcc["stat"]:
+                            if uw=="uwd":
+                                uw_flag="uw"
+                            elif uw=="wd":
+                                uw_flag="w"
+                            else:
+                                raise ValueError(f"uw:{uw}")
+                            self.matminer_col_names.append(f"{uw_flag}_{feat}_{stat}")
             self.feature_count["matminer"] = num_matminer_features
         # init config for 8/909 descriptors of Xu 2025
         if "xu_eight" in self.config["sources"]:
@@ -164,54 +248,34 @@ class Featurizer():
             raise NotImplementedError
         print(f"featurizer initialized; {self.feature_count}")
     
-    def featurize_matminer(self, data = pd.DataFrame) -> pd.DataFrame:
-        featurized_dset=[]
-        for _, row in data.iterrows():
-            assert pd.isna(row["Exceptions"])
+    def featurize_matminer(self, data = pd.DataFrame, save_npz: bool = False, impute_nan: bool = True) -> pd.DataFrame:
+        lendata = len(data)
+        featurized_dset=np.zeros((lendata, self.feature_count["matminer"]), dtype=float)
+        for idx, row in data.iterrows():
+            assert pd.isna(row.get("Exceptions", None))
             feature_row = []
-            for _, inp_desc in enumerate(self.config["matminer"]):
-                (src, feat, stat)=(inp_desc["src"], inp_desc["feature"], inp_desc["stat"])
-                elem_prop=ElementProperty(data_source=src, features = feat, stats=stat, impute_nan=False)
-                feature_row = np.append(feature_row, elem_prop.featurize(comp=row["comps_pymatgen"])).flatten()
-            featurized_dset.append(feature_row)
+            for inp_desc in self.config["matminer"]:
+                for uw in inp_desc.get('unweighted', ["wd",]):
+                    # process weighted
+                    assert uw=="wd" or uw=="uwd"
+                    (src, feat, stat)=(inp_desc["src"], inp_desc["feature"], inp_desc["stat"])
+                    elem_prop=MyElementProperty(data_source=src, features = feat, stats=stat, impute_nan=impute_nan)
+                    feature_row = np.append(feature_row, elem_prop.featurize_uw(comp=row["comps_pymatgen"], unweighted = uw)).flatten()
+            featurized_dset[idx] = np.array(feature_row, dtype=float)
+            if idx%100==0:
+                print(f"processed matminer features. {idx}/{lendata}")
+        if save_npz:
+            np.savez("featurize_matminer_temp.npz", featurized_dset)
         
         featurized_df = pd.DataFrame(data=featurized_dset, columns=self.matminer_col_names)
         return featurized_df
     
-    def featurize_bccfermi(self, df: pd.DataFrame) -> pd.DataFrame:
-        """featurize_bccfermi
-
-        License: MIT License
-
-            Copyright (c) 2019 UW-Madison Computational Materials Group
-
-            Permission is hereby granted, free of charge, to any person obtaining a copy
-            of this software and associated documentation files (the "Software"), to deal
-            in the Software without restriction, including without limitation the rights
-            to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-            copies of the Software, and to permit persons to whom the Software is
-            furnished to do so, subject to the following conditions:
-
-            The above copyright notice and this permission notice shall be included in all
-            copies or substantial portions of the Software.
-
-            THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-            IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-            FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-            AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-            LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-            OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-            SOFTWARE.
-        """
-        print(f"accessing [mast-ml](https://github.com/uw-cmg/MAST-ML) files, with LICENSE:\n{self.__doc__}")
-        pass
-        
-    
-    def featurize_xu8(self, df: pd.DataFrame) -> pd.DataFrame:
+    def featurize_xu8(self, df: pd.DataFrame, save_npz: bool = False) -> pd.DataFrame:
         inhouse_cols=[]
         inhouse_cols+=["elec_occu_s", "elec_occu_p","elec_occu_d","elec_occu_f"]
         inhouse_cols.append("mixing_entropy_perR")
         inhouse_cols+=["ionicity_ave", "ionicity_max", "ionicity_bool"]
+        lendata = len(df)
 
         features_generated = np.zeros((len(df), len(inhouse_cols)), dtype=float)
         for row_idx, row in df.iterrows():
@@ -224,17 +288,22 @@ class Featurizer():
             gen4row += ionicity(row["comps_pymatgen"])
             features_generated[row_idx] = np.array(gen4row, dtype=float)
 
-            featurized_df = pd.DataFrame(data=features_generated, columns=inhouse_cols, dtype = float)
+            if row_idx%100==0:
+                print(f"processed xu8 features. {row_idx}/{lendata}")
+        if save_npz:
+            np.savez("featurize_xu8_temp.npz", features_generated)
+        featurized_df = pd.DataFrame(data=features_generated, columns=inhouse_cols, dtype = float)
+
         return featurized_df
     
-    def featurize(self, df: pd.DataFrame) -> pd.DataFrame:
+    def featurize(self, df: pd.DataFrame, save_npz:bool = False) -> pd.DataFrame:
         first = True
-        featurized_df: pd.DataFrame
+        featurized_df: pd.DataFrame            
         for src in self.config["sources"]:
             if src == "matminer":
-                src_df = self.featurize_matminer(df)
+                src_df = self.featurize_matminer(df, save_npz)
             elif src == "xu_eight":
-                src_df = self.featurize_xu8(df)
+                src_df = self.featurize_xu8(df, save_npz)
             else:
                 raise NotImplementedError
             if first:
@@ -249,7 +318,13 @@ class Featurizer():
         return featurized_df
 
 class MyPropertyStats(PropertyStats):
-    
+    @staticmethod
+    def calc_stat(data_lst, stat, weights=None):
+        """
+        see super().calc_stat
+        """
+        statistics = stat.split("::")
+        return getattr(MyPropertyStats, statistics[0])(data_lst, weights, *statistics[1:])
     @staticmethod
     def iter_pair(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> list[tuple[float, float, float]] | list[tuple[float, float]]:
         """
@@ -258,14 +333,14 @@ class MyPropertyStats(PropertyStats):
         weights_rule = "temp": is arbitraly chosen one,
             * $min_{i<j}(w_{ij} AP_{ij})$, where $w_{ij} = \frac{x_i x_j}{sum_{p<q}{x_p x_q}}$
         """
-        if weights_rule is not "temp":
+        if weights_rule!="temp":
             raise NotImplementedError
         len_lst = len(data_lst)
         pairs = []
         if weights is not None:
             weights_sum = 0.0
-            for i in range(4):
-                for j in range(i+1, 4):
+            for i in range(len_lst):
+                for j in range(i+1, len_lst):
                     pair_weight = weights[i]*weights[j]
                     pairs.append([data_lst[i], data_lst[j], pair_weight])
                     weights_sum += pair_weight
@@ -275,22 +350,33 @@ class MyPropertyStats(PropertyStats):
             for i in range(len_lst):
                 for j in range(i, len_lst):
                     pairs.append((data_lst[i], data_lst[j]))
-            return pairs
+        return pairs
 
     @staticmethod
-    def all_aps(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> tuple[list[float], list[float]]:
+    def all_aps(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> list[float]:
         """
         return all absolute percentages as a list
         """
         assert weights_rule == "temp", NotImplementedError
         list_out = []
-        if weights is not None:
-            for da, db, weight in MyPropertyStats.iter_pair(data_lst, weights):
-                list_out.append(weight*np.abs(da-db)/np.mean(da+db))
+        if len(data_lst)==1:
+            return [0,] #according to the definition of AP_{ij}..
+        elif len(data_lst)>1 and len(data_lst)<30:
+            if weights is not None:
+                for da, db, weight in MyPropertyStats.iter_pair(data_lst, weights):
+                    out = weight*np.abs(da-db)/np.mean(da+db)
+                    if np.isnan(out):
+                        out = 0.0
+                    list_out.append(out)
+            else:
+                for da, db in MyPropertyStats.iter_pair(data_lst, None):
+                    out = np.abs(da-db)/np.mean(da+db)
+                    if np.isnan(out):
+                        out = 0.0
+                    list_out.append(out)
+            return list_out
         else:
-            for da, db, weight in MyPropertyStats.iter_pair(data_lst, None):
-                list_out.append((np.abs(da-db)/np.mean(da+db)))
-        return list_out
+            raise ValueError(f"len(data_lst):{len(data_lst)}")
 
     @staticmethod
     def ap_mean(data_lst, weights = None):
@@ -298,13 +384,26 @@ class MyPropertyStats(PropertyStats):
     
     @staticmethod
     def ap_maximum(data_lst, weights = None):
-        return np.maximum(MyPropertyStats.all_aps(data_lst, weights))
+        return PropertyStats.maximum(MyPropertyStats.all_aps(data_lst, weights))
     
     @staticmethod
     def ap_minimum(data_lst, weights = None):
-        return np.minimum(MyPropertyStats.all_aps(data_lst, weights))
+        return PropertyStats.minimum(MyPropertyStats.all_aps(data_lst, weights))
 
     @staticmethod
     def ap_range(data_lst, weights = None):
         return MyPropertyStats.ap_maximum(data_lst, weights)-MyPropertyStats.ap_minimum(data_lst, weights)
+    
+    @staticmethod
+    def mae(data_lst, weights = None):
+        mae = 0.0
+        mean = PropertyStats.mean(data_lst, weights)
+        if weights != None:
+            for v, w in zip(data_lst, weights):
+                mae = mae + w*np.abs(w-mean)
+        elif weights == None:
+            for w in data_lst:
+                mae = mae + np.abs(w-mean)
+            mae = mae / len(data_lst)
+        return mae
     

@@ -143,7 +143,7 @@ def parse_value_with_uncertainty(s: str):
 
     return {"mean":float(mean), "std": float(std)}
 
-def process_targets(df: pd.DataFrame, targets: list[str], non_sc_rule: str = "old") -> pd.DataFrame:
+def process_targets(df: pd.DataFrame, targets: list[str], non_sc_rule: str = "old", exception_row: str | None = "Exceptions") -> pd.DataFrame:
     """process targets, return a new pd.DataFrame"""
     #checkout targets
     valid_targets = ["avg_Tc", "max_Tc", "std_Tc"]
@@ -155,7 +155,8 @@ def process_targets(df: pd.DataFrame, targets: list[str], non_sc_rule: str = "ol
     tc_cols=["Tc(K).resistivity.mid", "Tc(K).magnetization.mid", "Tc(K).resistivity.None", "Tc(K).magnetization.onset", "Tc(K).magnetization.None", "Tc(K).resistivity.zero", "Tc(K).specific_heat.mid", "Tc(K).other.None", "Tc(K).resistivity.onset", "Tc(K).specific_heat.onset", "Tc(K).specific_heat.None", "Tc(K).magnetization.zero", "Tc(K).other.onset", "Tc(K).other.mid", "Tc(K).specific_heat.zero"]
     target_array = []
     for row_idx, row in df.iterrows():
-        assert pd.isna(row["Exceptions"])
+        if exception_row:
+            assert pd.isna(row[exception_row])
         # gather tcs, not_passed_tc_cols.
         tcs=[]
         not_passed_tc_cols=[]
@@ -181,19 +182,19 @@ def process_targets(df: pd.DataFrame, targets: list[str], non_sc_rule: str = "ol
                     tcs.append(parse_value_with_uncertainty(str(val)))
                     not_passed_tc_cols.append(key)
                 else:
-                    raise ValueError(f"exception: Tc(K):{val}, type:{type(val)} on {key} is not a string, not nan\nrow_idx: {row_idx}, comp:{row["comps_pymatgen"]}, tcs:{tcs}, not_passed_tc_cols: {[row[ex_col] for ex_col in not_passed_tc_cols]}")
+                    raise ValueError(f"exception: Tc(K):{val}, type:{type(val)} on {key} is not a string, not nan\nrow_idx: {row_idx}, comp:{row.get("comps_pymatgen", "unknown comps")}, tcs:{tcs}, not_passed_tc_cols: {[row[ex_col] for ex_col in not_passed_tc_cols]}")
             except:
                 not_passed_tc_cols.append(key)
                 if val== 'Non-superconducting':
                     pass
                 else:
-                    raise ValueError(f"exception: {val}, type:{type(val)}, pd.isna{pd.isna(val)}, row_idx: {row_idx}, comp:{row["comps_pymatgen"]}")
+                    raise ValueError(f"exception: {val}, type:{type(val)}, pd.isna{pd.isna(val)}, row_idx: {row_idx}, comp:{row.get("comps_pymatgen", "unknown comps")}")
         
         # update target_array
         assert non_sc_rule=="old", NotImplemented
         row_target = []
         if len(tcs)==0:
-            print(f"no valid tc parsed. assign Tc=0 for row_idx: {row_idx}, comp:{row["comps_pymatgen"]}, tcs:{tcs}, not_passed_tc_cols: {[row[ex_col] for ex_col in not_passed_tc_cols]}")
+            print(f"no valid tc parsed. assign Tc=0 for row_idx: {row_idx}, comp:{row.get("comps_pymatgen", "unknown comps")}, tcs:{tcs}, not_passed_tc_cols: {[row[ex_col] for ex_col in not_passed_tc_cols]}")
             for target in targets:
                 if target=="avg_Tc" or "max_Tc":
                     row_target.append(0.1) #0.1 is an arbitrary offset for non_sc
