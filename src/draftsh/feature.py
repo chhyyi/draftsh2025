@@ -219,10 +219,11 @@ class Featurizer():
         assert len(self.config["sources"])>0
         self.feature_count = {}
         # init matminer configs
+        self.col_names = {}
         if "matminer" in self.config["sources"]:
             assert self.config["matminer"]
             num_matminer_features = 0
-            self.matminer_col_names = []
+            matminer_col_names = []
             for srcc in self.config["matminer"]:
                 num_matminer_features += len(srcc["feature"])\
                     *len(srcc["stat"])*len(srcc.get('unweighted', ["wd"]))
@@ -237,8 +238,9 @@ class Featurizer():
                                 uw_flag="w"
                             else:
                                 raise ValueError(f"uw:{uw}")
-                            self.matminer_col_names.append(f"{uw_flag}_{feat}_{stat}")
-            self.feature_count["matminer"] = num_matminer_features
+                            matminer_col_names.append(f"{uw_flag}_{feat}_{stat}")
+            self.feature_count["matminer_expanded"] = num_matminer_features
+            self.col_names["matminer_expanded"] = matminer_col_names
         # init config for 8/909 descriptors of Xu 2025
         if "xu_eight" in self.config["sources"]:
             self.xu_eight: bool = bool(self.config["xu_eight"])
@@ -250,7 +252,7 @@ class Featurizer():
     
     def featurize_matminer(self, data = pd.DataFrame, save_npz: bool = False, impute_nan: bool = True) -> pd.DataFrame:
         lendata = len(data)
-        featurized_dset=np.zeros((lendata, self.feature_count["matminer"]), dtype=float)
+        featurized_dset=np.zeros((lendata, self.feature_count["matminer_expanded"]), dtype=float)
         for idx, row in data.iterrows():
             assert pd.isna(row.get("Exceptions", None))
             feature_row = []
@@ -267,7 +269,7 @@ class Featurizer():
         if save_npz:
             np.savez("featurize_matminer_temp.npz", featurized_dset)
         
-        featurized_df = pd.DataFrame(data=featurized_dset, columns=self.matminer_col_names)
+        featurized_df = pd.DataFrame(data=featurized_dset, columns=self.col_names["matminer_expanded"])
         return featurized_df
     
     def featurize_xu8(self, df: pd.DataFrame, save_npz: bool = False) -> pd.DataFrame:
@@ -276,6 +278,8 @@ class Featurizer():
         inhouse_cols.append("mixing_entropy_perR")
         inhouse_cols+=["ionicity_ave", "ionicity_max", "ionicity_bool"]
         lendata = len(df)
+        self.col_names["xu_eight"] = inhouse_cols
+
 
         features_generated = np.zeros((len(df), len(inhouse_cols)), dtype=float)
         for row_idx, row in df.iterrows():
