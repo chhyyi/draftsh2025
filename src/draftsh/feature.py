@@ -308,7 +308,7 @@ class Featurizer():
             if row_idx%100==0:
                 print(f"processed xu8 features. {row_idx}/{lendata}")
         if save_npz is not None:
-            np.savez("featurize_xu8_temp.npz", features_generated)
+            np.savez(save_npz, features_generated)
         featurized_df = pd.DataFrame(data=features_generated, columns=inhouse_cols, dtype = float)
 
         return featurized_df
