@@ -1,4 +1,8 @@
-"""load in-house dataset"""
+"""load in-house dataset
+
+Todo
+    * refactor DLDataset
+"""
 
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -151,7 +155,14 @@ class Dataset(XlsxDataset):
         cell_parser = FracParser()
         return self.parse_col(colname, cell_parser, False)
     
-    def featurize_and_split(self, featurizer: Featurizer, test_size: float = 0.2, shuffle: bool = True, seed: int = 42, to_numpy: bool = False) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def featurize_and_split(self,
+                            featurizer: Featurizer, test_size: float = 0.2,
+                            shuffle: bool = True, seed: int = 42,
+                            to_numpy: bool = False) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """process target and features(input), split.
+
+        arguments:
+        """
         target_df = process_targets(self.dataframe, targets = self.config["targets"])
         featurized_df = featurizer.featurize(self.dataframe)
         # featurized_df and target_df

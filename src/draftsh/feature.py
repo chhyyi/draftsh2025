@@ -255,6 +255,10 @@ class Featurizer():
     def featurize_matminer(self,
                            data = pd.DataFrame, save_npz: str | None = None,
                            impute_nan: bool = True) -> pd.DataFrame:
+        if Path(save_npz).is_dir():
+            save_npz = Path(save_npz).joinpath("temp_matminer_features.npz")
+        else:
+            raise NotImplementedError(save_npz)
         lendata = len(data)
         featurized_dset=np.zeros((lendata, self.feature_count["matminer_expanded"]), dtype=float)
         for idx, row in data.iterrows():
@@ -277,6 +281,11 @@ class Featurizer():
         return featurized_df
     
     def featurize_xu8(self, df: pd.DataFrame, save_npz: str | None = None) -> pd.DataFrame:
+
+        if Path(save_npz).is_dir():
+            save_npz = Path(save_npz).joinpath("temp_xu8_features.npz")
+        else:
+            raise NotImplementedError(save_npz)
         inhouse_cols=[]
         inhouse_cols+=["elec_occu_s", "elec_occu_p","elec_occu_d","elec_occu_f"]
         inhouse_cols.append("mixing_entropy_perR")
@@ -305,10 +314,20 @@ class Featurizer():
         return featurized_df
     
     def featurize(self, df: pd.DataFrame, save_npz: str | None = None) -> pd.DataFrame:
+        """featurize dataframe
+
+        arguments:
+            * save_npz: str | None = None
+                if not none, save processed features of each featurize functions respectedly not a whole one. 
+                should be directory path only
+        """
+
+        assert(Path(save_npz).is_dir())
         first = True
         featurized_df: pd.DataFrame            
         for src in self.config["sources"]:
             if src == "matminer":
+
                 src_df = self.featurize_matminer(df, save_npz)
             elif src == "xu_eight":
                 src_df = self.featurize_xu8(df, save_npz)
