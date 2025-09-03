@@ -125,12 +125,12 @@ class MyElementProperty(ElementProperty):
         self.unweight = unweight
         self.pstats = MyPropertyStats() #override
     
-    def featurize_uw(self, comp, unweighted: bool):
+    def featurize_uw(self, comp, unweighted: str):
         """
         if unweight, `fractions = None`
         mostly copy of ElementryProperty.featurize
         """
-        if unweighted:
+        if unweighted == "uwd":
             all_attributes = []
             elements, _ = zip(*comp.element_composition.items())
 
@@ -144,17 +144,19 @@ class MyElementProperty(ElementProperty):
                     all_attributes.append(self.pstats.calc_stat(elem_data, stat, weights=None))
 
             return all_attributes
-        else:
+        elif unweighted == "wd":
             if isinstance(self.data_source, str) and self.data_source=="bccfermi": # for bccfermi (later for other features):
                 all_attributes = []
-                elements, _ = zip(*comp.element_composition.items())
+                elements, weights = zip(*comp.element_composition.items())
 
                 elem_data = [self.bccfermi(e) for e in elements]
                 for stat in self.stats:
-                    all_attributes.append(self.pstats.calc_stat(elem_data, stat, weights=None))
+                    all_attributes.append(self.pstats.calc_stat(elem_data, stat, weights=weights))
                 return all_attributes
             else:
-                return self.featurize(comp)
+                return super().featurize(comp)
+        else:
+            raise ValueError(unweighted)
     
     def bccfermi(self, e):
         """featurize_bccfermi
@@ -250,7 +252,9 @@ class Featurizer():
             raise NotImplementedError
         print(f"featurizer initialized; {self.feature_count}")
     
-    def featurize_matminer(self, data = pd.DataFrame, save_npz: bool = False, impute_nan: bool = True) -> pd.DataFrame:
+    def featurize_matminer(self,
+                           data = pd.DataFrame, save_npz: str | None = None,
+                           impute_nan: bool = True) -> pd.DataFrame:
         lendata = len(data)
         featurized_dset=np.zeros((lendata, self.feature_count["matminer_expanded"]), dtype=float)
         for idx, row in data.iterrows():
@@ -266,13 +270,13 @@ class Featurizer():
             featurized_dset[idx] = np.array(feature_row, dtype=float)
             if idx%100==0:
                 print(f"processed matminer features. {idx}/{lendata}")
-        if save_npz:
-            np.savez("featurize_matminer_temp.npz", featurized_dset)
+        if save_npz is not None:
+            np.savez(save_npz, featurized_dset)
         
         featurized_df = pd.DataFrame(data=featurized_dset, columns=self.col_names["matminer_expanded"])
         return featurized_df
     
-    def featurize_xu8(self, df: pd.DataFrame, save_npz: bool = False) -> pd.DataFrame:
+    def featurize_xu8(self, df: pd.DataFrame, save_npz: str | None = None) -> pd.DataFrame:
         inhouse_cols=[]
         inhouse_cols+=["elec_occu_s", "elec_occu_p","elec_occu_d","elec_occu_f"]
         inhouse_cols.append("mixing_entropy_perR")
@@ -294,13 +298,13 @@ class Featurizer():
 
             if row_idx%100==0:
                 print(f"processed xu8 features. {row_idx}/{lendata}")
-        if save_npz:
+        if save_npz is not None:
             np.savez("featurize_xu8_temp.npz", features_generated)
         featurized_df = pd.DataFrame(data=features_generated, columns=inhouse_cols, dtype = float)
 
         return featurized_df
     
-    def featurize(self, df: pd.DataFrame, save_npz:bool = False) -> pd.DataFrame:
+    def featurize(self, df: pd.DataFrame, save_npz: str | None = None) -> pd.DataFrame:
         first = True
         featurized_df: pd.DataFrame            
         for src in self.config["sources"]:
@@ -329,6 +333,7 @@ class MyPropertyStats(PropertyStats):
         """
         statistics = stat.split("::")
         return getattr(MyPropertyStats, statistics[0])(data_lst, weights, *statistics[1:])
+        
     @staticmethod
     def iter_pair(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> list[tuple[float, float, float]] | list[tuple[float, float]]:
         """
