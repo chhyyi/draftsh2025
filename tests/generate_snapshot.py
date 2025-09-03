@@ -25,7 +25,7 @@ def generate_snapshot(data_dir: Path):
     assert isinstance(dataset.dataframe, pd.DataFrame)
 
     # get featurized dataset
-    featurizer = Featurizer(config=r"test.json")
+    featurizer = Featurizer(config=r"xu.json")
     featurized_ds = dataset.featurize_and_split(
         featurizer=featurizer, test_size=0.2,
         shuffle=False, to_numpy=True)
