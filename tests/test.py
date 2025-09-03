@@ -24,17 +24,34 @@ from matminer.featurizers.composition import ElementProperty
 from pymatgen.core.composition import Composition
 
 from draftsh.dataset import Dataset
-from draftsh.feature import Featurizer
+from draftsh.feature import Featurizer, MyElementProperty
 from draftsh.comparison import XuTestHEA
 # checkout dataset.dataframe.loc[7], 'w_NpValence_mean'
 # which is source of featurized_snapshot[0][7, 28] and featurized_np[0][7, 28]
 
-def specific_value(live_data: list[np.array], snapshot: list[np.array], comp: str = "Ru0.075Rh0.075Pd0.075Ir0.075Pt0.70Sb", largest_idx: tuple[int] = (0, 7, 28), source: str = "magpie", feature: list[str] = ["NpValence"], stats: list[str] = ["mean"], weight:str = "w"):
+def specific_value(live_data: list[np.array], snapshot: list[np.array], featurizer: Featurizer, comp: str = "Ru0.075Rh0.075Pd0.075Ir0.075Pt0.70Sb", specific_idx: tuple[int] = (0, 7, 28), source: str = "magpie", feature: list[str] = ["NpValence"], stats: list[str] = ["mean"], weight:str = "w"):
     assert weight=="w", weight
-    prop = ElementProperty(data_source=source, features=feature, stats=stats)
+    prop = MyElementProperty(data_source=source, features=feature, stats=stats)
     comp = Composition(comp)
     elements, fractions = zip(*comp.element_composition.items())
 
+    # find column idx
+    found_col = 0
+    for idx, feat_col in enumerate(featurizer.col_names["matminer_expanded"]):
+        if feat_col == f'{weight}_{feature[0]}_{stats[0]}':
+            found_col = found_col+1
+            print(idx)
+            if idx!=specific_idx[2]:
+                print(f"fixing specific_idx from: {specific_idx[2]} to: {idx}")
+                specific_idx = (specific_idx[0], specific_idx[1], idx)
+    if found_col == 1:
+        pass
+    elif found_col >1:
+        raise KeyError(found_col)
+    else:
+        raise ValueError(found_col)
+                
+    
     all_attributes = []
     for attr in prop.features:
         elem_data = [prop.data_source.get_elemental_property(e, attr) for e in elements]
@@ -44,10 +61,9 @@ def specific_value(live_data: list[np.array], snapshot: list[np.array], comp: st
 
     print(f"from attributes of ElementProperty class: {all_attributes}")
     print(f"from attributes of ElementProperty.featurize() method:{prop.featurize(comp)}")
-    mean_temp = np.sum([elem_data[i]*fractions[i] for i in range(len(elem_data))])/np.sum(fractions)
-    print(f"from elem_data and fractions:{mean_temp}")
-    print(f"from featurized_snapshot: {snapshot[largest_idx[0]][*largest_idx[1:]]}")
-    print(f"from featurized_np (live): {live_data[largest_idx[0]][*largest_idx[1:]]}")
+    print(f"elements: {comp}, elem_data: {elem_data}, fractions:{fractions}")
+    print(f"from featurized_snapshot: {snapshot[specific_idx[0]][*specific_idx[1:]]}")
+    print(f"from featurized_np (live): {live_data[specific_idx[0]][*specific_idx[1:]]}")
 
 class Test(unittest.TestCase):
     """Test core class methods"""
@@ -65,16 +81,14 @@ class Test(unittest.TestCase):
         pd.testing.assert_frame_equal(dataset_snapshot_df, dataset.dataframe.drop(columns=["comps_pymatgen"]), check_exact=False)
 
         # test featurized dataset
-        featurizer = Featurizer(config=r"test.json")
+        featurizer = Featurizer(config=r"xu.json")
         featurized_np = dataset.featurize_and_split(featurizer=featurizer, test_size=0.2, shuffle=False, to_numpy=True)
         npz_loaded = np.load(data_dir.joinpath("snapshot_featurized.npz"), allow_pickle=False)
         featurized_snapshot = [npz_loaded["x_train"], npz_loaded["y_train"], npz_loaded["x_test"], npz_loaded["y_test"]]
         for i in range(4):
             assert_almost_equal(featurized_snapshot[i], featurized_np[i])
         
-        # compare specific data..
-        specific_value(live_data=featurized_np, snapshot=featurized_snapshot)
-            
+           
         # compare as dataframe:
         errors = []
         divide_by_zero_indices = []
@@ -140,7 +154,10 @@ class Test(unittest.TestCase):
             
             high_error_ordered = flat_sorted_df["feature_type"].tail(10).value_counts()
             high_error_features += list(high_error_ordered.reset_index(drop=False)["feature_type"][:2])
-        
+        # compare specific data..
+        specific_value(live_data=featurized_np, snapshot=featurized_snapshot, featurizer=featurizer)
+        specific_value(live_data=featurized_np, snapshot=featurized_snapshot, featurizer=featurizer, stats=["ap_mean"], specific_idx=(0,7,227))
+
         #xu_val_r2score: test XuDataset reproduces the snapshot
         xu_dataset = XuTestHEA()
         r2score = r2_score(xu_dataset.dataframe["Experimental_T_c(K)"], xu_dataset.dataframe["Predicted_T_c(K)"])

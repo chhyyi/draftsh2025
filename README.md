@@ -3,6 +3,7 @@
 **NOTE**  
 * **Repo for collabs**, not ready for public share yet!
 * Download Dataset from shared Google Drive!
+* **Fixed test error claimed on `51b7091`. all unweighted features were invalid!**
 
 ## Installation for Development
 ### `Poetry` Virtual Environment (Recommended)

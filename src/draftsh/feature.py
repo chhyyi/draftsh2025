@@ -184,7 +184,7 @@ class MyElementProperty(ElementProperty):
             LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
             OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
             SOFTWARE."""
-        warnings.warn(f"accessing [mast-ml](https://github.com/uw-cmg/MAST-ML) files, with LICENSE:\n{self.__doc__}", UserWarning)
+        warnings.warn("accessing [mast-ml](https://github.com/uw-cmg/MAST-ML) files, with LICENSE: \n"+MyElementProperty.bccfermi.__doc__, UserWarning)
         with resources.as_file(resources.files("draftsh.data.miscs") /"BCCfermi.csv") as path:
             csv_path = path
         supercon_preprocessed = pd.read_csv(csv_path)
