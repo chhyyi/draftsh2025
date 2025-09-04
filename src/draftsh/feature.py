@@ -24,7 +24,7 @@ import pandas as pd
 from matminer.featurizers.composition import ElementProperty
 from matminer.featurizers.utils.stats import PropertyStats
 
-from draftsh.utils import config_parser
+from draftsh.utils.utils import config_parser
 import warnings
 
 # functions to generate 8/909 descriptors of xu 2025
@@ -41,28 +41,33 @@ def val_electron_occupation(test_comp, impute_nan: bool = True):
     occupation state of valence electron
     """
     orbs = ["NsValence", "NpValence", "NdValence", "NfValence",]
-    occu4orbits=ElementProperty(data_source="magpie", features = orbs, stats=["mean"], impute_nan=impute_nan)
-    n_valence=ElementProperty(data_source="magpie", features = ["NValence"], stats=["mean"], impute_nan=impute_nan)
+    occu4orbits=ElementProperty(data_source="magpie", features = orbs,
+                                stats=["mean"], impute_nan=impute_nan)
+    n_valence=ElementProperty(data_source="magpie", features = ["NValence"],
+                              stats=["mean"], impute_nan=impute_nan)
     return np.array(occu4orbits.featurize(comp=test_comp))/np.array(n_valence.featurize(comp=test_comp))
 
 def ionicity(test_comp, impute_nan: bool = True):
-  prop=ElementProperty(data_source="deml", features = ["electronegativity",], stats=["mean", "maximum"], impute_nan=impute_nan) #for unidentified reason, nan masked(from pandas) inputed with valid floating numbers
+    prop=ElementProperty(data_source="deml", features = ["electronegativity",],
+                         stats=["mean", "maximum"], impute_nan=impute_nan)
+    #for unidentified reason, nan masked(from pandas) inputed with valid floating numbers
 
-  mean_ene, max_ene = prop.featurize(test_comp)
-  elems, fracs = zip(*test_comp.element_composition.items())
-  enes = [float(prop.data_source.get_elemental_property(e, "electronegativity")) for e in elems]
+    mean_ene, max_ene = prop.featurize(test_comp)
+    elems, fracs = zip(*test_comp.element_composition.items())
+    enes = [float(prop.data_source.get_elemental_property(e, "electronegativity")) for e in elems]
 
-  if pd.isna(enes).any():
-    print(f"is_nan enes, fracs:{fracs}, {pd.isna(enes)}, elem:{elems}, types:{[type(ene) for ene in enes]}, np.ma.is_masked:{[np.ma.is_masked(ene) for ene in enes]}")
-  def ionicity_calc(fracs, enes, criteria):
+    if pd.isna(enes).any():
+        print(f"is_nan enes, fracs:{fracs}, {pd.isna(enes)}, \
+              elem:{elems}, types:{[type(ene) for ene in enes]}, \
+                np.ma.is_masked:{[np.ma.is_masked(ene) for ene in enes]}")
+    def ionicity_calc(fracs, enes, criteria):
+        sum_sum=np.sum([frac*np.abs(ene-criteria) for ene, frac in zip(enes, fracs)])
+        return 1-np.exp(-(1/4)*sum_sum)
 
-    sum_sum=np.sum([frac*np.abs(ene-criteria) for ene, frac in zip(enes, fracs)])
-    return 1-np.exp(-(1/4)*sum_sum)
+    ion_mean = ionicity_calc(fracs, enes, mean_ene)
+    ion_max = ionicity_calc(fracs, enes, max_ene)
 
-  ion_mean = ionicity_calc(fracs, enes, mean_ene)
-  ion_max = ionicity_calc(fracs, enes, max_ene)
-
-  return ion_mean, ion_max, 1 if ion_mean>1.7 else 0
+    return ion_mean, ion_max, 1 if ion_mean>1.7 else 0
 
 # parse string of a float with uncertainty
 def parse_value_with_uncertainty(s: str):
@@ -135,7 +140,8 @@ class MyElementProperty(ElementProperty):
             elements, _ = zip(*comp.element_composition.items())
 
             for attr in self.features:
-                if isinstance(self.data_source, str) and self.data_source=="bccfermi": # for bccfermi (later for other features):
+                if isinstance(self.data_source, str) and self.data_source=="bccfermi": \
+                    # for bccfermi (later for other features):
                     elem_data = [self.bccfermi(e) for e in elements]
                 else:
                     elem_data = [self.data_source.get_elemental_property(e, attr) for e in elements]
@@ -145,7 +151,8 @@ class MyElementProperty(ElementProperty):
 
             return all_attributes
         elif unweighted == "wd":
-            if isinstance(self.data_source, str) and self.data_source=="bccfermi": # for bccfermi (later for other features):
+            if isinstance(self.data_source, str) and self.data_source=="bccfermi": \
+                # for bccfermi (later for other features):
                 all_attributes = []
                 elements, weights = zip(*comp.element_composition.items())
 
@@ -159,11 +166,7 @@ class MyElementProperty(ElementProperty):
             raise ValueError(unweighted)
     
     def bccfermi(self, e):
-        """featurize_bccfermi
-
-        License: MIT License
-        """
-        license_docs = """License: MIT License
+        """License: MIT License
 
             Copyright (c) 2019 UW-Madison Computational Materials Group
 
@@ -184,7 +187,8 @@ class MyElementProperty(ElementProperty):
             LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
             OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
             SOFTWARE."""
-        warnings.warn("accessing [mast-ml](https://github.com/uw-cmg/MAST-ML) files, with LICENSE: \n"+MyElementProperty.bccfermi.__doc__, UserWarning)
+        warnings.warn("""accessing [mast-ml](https://github.com/uw-cmg/MAST-ML) files, 
+                      with LICENSE: \n"""+self.bccfermi.__doc__, UserWarning)
         with resources.as_file(resources.files("draftsh.data.miscs") /"BCCfermi.csv") as path:
             csv_path = path
         supercon_preprocessed = pd.read_csv(csv_path)
@@ -253,12 +257,15 @@ class Featurizer():
         print(f"featurizer initialized; {self.feature_count}")
     
     def featurize_matminer(self,
-                           data = pd.DataFrame, save_npz: str | None = None,
-                           impute_nan: bool = True) -> pd.DataFrame:
-        if Path(save_npz).is_dir():
-            save_npz = Path(save_npz).joinpath("temp_matminer_features.npz")
-        else:
-            raise NotImplementedError(save_npz)
+                           data = pd.DataFrame,
+                           save_npz_dir: str | None = None,
+                           file_name: str | None = "matminer_features.npz",
+                           impute_nan: bool = True
+                           ) -> pd.DataFrame:
+        if save_npz_dir is not None:
+            assert Path(save_npz_dir).is_dir(), NotImplementedError(save_npz_dir)
+            save_npz_pth = Path(save_npz_dir).joinpath(file_name)
+
         lendata = len(data)
         featurized_dset=np.zeros((lendata, self.feature_count["matminer_expanded"]), dtype=float)
         for idx, row in data.iterrows():
@@ -274,18 +281,20 @@ class Featurizer():
             featurized_dset[idx] = np.array(feature_row, dtype=float)
             if idx%100==0:
                 print(f"processed matminer features. {idx}/{lendata}")
-        if save_npz is not None:
-            np.savez(save_npz, featurized_dset)
+        if save_npz_dir is not None:
+            np.savez(save_npz_pth, featurized_dset)
         
         featurized_df = pd.DataFrame(data=featurized_dset, columns=self.col_names["matminer_expanded"])
         return featurized_df
     
-    def featurize_xu8(self, df: pd.DataFrame, save_npz: str | None = None) -> pd.DataFrame:
+    def featurize_xu8(self, df: pd.DataFrame,
+                      save_npz_dir: str | None = None,
+                      file_name: str | None = "xu8_features.npz"
+                      ) -> pd.DataFrame:
+        if save_npz_dir is not None:
+            assert Path(save_npz_dir).is_dir(), NotImplementedError(save_npz_dir)
+            save_npz = Path(save_npz_dir).joinpath(file_name)
 
-        if Path(save_npz).is_dir():
-            save_npz = Path(save_npz).joinpath("temp_xu8_features.npz")
-        else:
-            raise NotImplementedError(save_npz)
         inhouse_cols=[]
         inhouse_cols+=["elec_occu_s", "elec_occu_p","elec_occu_d","elec_occu_f"]
         inhouse_cols.append("mixing_entropy_perR")
@@ -307,13 +316,13 @@ class Featurizer():
 
             if row_idx%100==0:
                 print(f"processed xu8 features. {row_idx}/{lendata}")
-        if save_npz is not None:
+        if save_npz_dir is not None:
             np.savez(save_npz, features_generated)
         featurized_df = pd.DataFrame(data=features_generated, columns=inhouse_cols, dtype = float)
 
         return featurized_df
     
-    def featurize(self, df: pd.DataFrame, save_npz: str | None = None) -> pd.DataFrame:
+    def featurize(self, df: pd.DataFrame, save_npz_dir: str | None = None) -> pd.DataFrame:
         """featurize dataframe
 
         arguments:
@@ -321,16 +330,16 @@ class Featurizer():
                 if not none, save processed features of each featurize functions respectedly not a whole one. 
                 should be directory path only
         """
-
-        assert(Path(save_npz).is_dir())
+        if save_npz_dir is not None:
+            assert(Path(save_npz_dir).is_dir())
         first = True
         featurized_df: pd.DataFrame            
         for src in self.config["sources"]:
             if src == "matminer":
 
-                src_df = self.featurize_matminer(df, save_npz)
+                src_df = self.featurize_matminer(df, save_npz_dir)
             elif src == "xu_eight":
-                src_df = self.featurize_xu8(df, save_npz)
+                src_df = self.featurize_xu8(df, save_npz_dir)
             else:
                 raise NotImplementedError
             if first:
@@ -372,8 +381,8 @@ class MyPropertyStats(PropertyStats):
                     pair_weight = weights[i]*weights[j]
                     pairs.append([data_lst[i], data_lst[j], pair_weight])
                     weights_sum += pair_weight
-            for pair in pairs:
-                pair[2] = pair[2]/weights_sum
+            for j, pair in enumerate(pairs):
+                pairs[j][2] = pair[2]/weights_sum
         else:
             for i in range(len_lst):
                 for j in range(i, len_lst):
@@ -385,7 +394,8 @@ class MyPropertyStats(PropertyStats):
         """
         return all absolute percentages as a list
         """
-        assert weights_rule == "temp", NotImplementedError
+        assert weights_rule == "temp", NotImplementedError(weights_rule)
+        assert all([d >= 0.0 for d in data_lst]), ValueError([d >= 0.0 for d in data_lst])
         list_out = []
         if len(data_lst)==1:
             return [0,] #according to the definition of AP_{ij}..
@@ -428,10 +438,11 @@ class MyPropertyStats(PropertyStats):
         mean = PropertyStats.mean(data_lst, weights)
         if weights != None:
             for v, w in zip(data_lst, weights):
-                mae = mae + w*np.abs(w-mean)
+                mae = mae + w*np.abs(v-mean)
+            mae = mae / np.sum(weights)
         elif weights == None:
-            for w in data_lst:
-                mae = mae + np.abs(w-mean)
+            for v in data_lst:
+                mae = mae + np.abs(v-mean)
             mae = mae / len(data_lst)
         return mae
     

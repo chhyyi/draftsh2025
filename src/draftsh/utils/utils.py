@@ -1,6 +1,7 @@
 """utility functions 
 
-config_parser
+functions:
+    * config_parser()
 """
 
 import json

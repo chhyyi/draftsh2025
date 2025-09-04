@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split
 from matminer.featurizers.composition import ElementProperty
 
 from draftsh.parsers import CellParser, FracParser, ElemParser, process_targets
-from draftsh.utils import config_parser
+from draftsh.utils.utils import config_parser
 from draftsh.feature import Featurizer
 
 
