@@ -76,6 +76,8 @@ def specific_value(
 def compare_as_dataframe(
         live_arrays: list[np.array], snapshot_arrays: list[np.array],
         dataset: Dataset, featurizer: Featurizer,
+        max_high_errors: tuple[int, int, int, int] = (10, 1, 10, 1),
+        max_high_error_features_to_return: tuple[int, int, int, int] = (2, 1, 2, 1),
         assert_every_features_in_common: str | None = None
         ) -> list[str]:
     """compare as dataframe
@@ -91,22 +93,25 @@ def compare_as_dataframe(
             high_error_instances (not implemented further)
 
     arguments: 
-        * assert_every_features_in_common: see below for.
+        * assert_every_features_in_common: see below for details.
+            * analyze features made error, run with old snapshots!
     
-    assert_every_features_in_common: str | None = "mae_20250904"
-        * What it does: 
-            * `assert all("mae" in col_names[i] for i \
-            in flat_sorted_df_by_features[-320:]["feature_type"].values)`
-            * sort by error, extract 320 data with higher error
-                (data: all the feature values every instances).
-                make sure theier col_name have "mae" in common.
-        * why I did it: 
-            * on 2025 sep 04, 5PM(working on commit `393f3b4`) 
-                I found that `mae` was wrong.
-                (method mae() of draftsh.feature.MyPropertyStats)
-            * after I have fixed it,
-                `assert_almost_equal(featurized_snapshot[i], featurized_np[i])`
-                showed that 320 was not almost equal.    
+    assert_every_features_in_common: str | None 
+        * "mae_20250904"
+            * What it does: 
+                * `assert all("mae" in col_names[i] for i \
+                in flat_sorted_df_by_features[-320:]["feature_type"].values)`
+                * sort by error, extract 320 data with higher error
+                    (data: all the feature values every instances).
+                    make sure theier col_name have "mae" in common.
+            * why I did it: 
+                * on 2025 sep 04, 5PM(working on commit `393f3b4`) 
+                    I found that `mae` was wrong.
+                    (method mae() of draftsh.feature.MyPropertyStats)
+                * after I have fixed it,
+                    `assert_almost_equal(featurized_snapshot[i], featurized_np[i])`
+                    showed that 320 was not almost equal.    
+        * "20250905s": see [`changes.md`](changes.md) since `0d1d5d9`
     """
 
     errors = relative_error(live_arrays, snapshot_arrays)
@@ -115,20 +120,17 @@ def compare_as_dataframe(
     col_names_input = featurizer.col_names["matminer_expanded"] + featurizer.col_names["xu_eight"]
     col_names_target = ['avg_Tc', 'std_Tc']
 
-    high_error_features = []
+    total_high_error_features = []
 
     # concatenate errors into input_erros and target_errors
-    input_errors = np.concatenate((errors[0], errors[2]), axis=0)
-    target_errors = np.concatenate((errors[1], errors[3]), axis=0)
-    for input_or_tar in ["input", "target"]:
-
+    
+    for splits_idx, input_or_tar in enumerate(["input", "target", "input", "target"]):
         # switch col_names between input/target
+        test_errors = errors[splits_idx]
         if input_or_tar == "input":
             col_names = col_names_input
-            test_errors = input_errors
         elif input_or_tar == "target":
             col_names = col_names_target
-            test_errors = target_errors
         else:
             raise ValueError(input_or_tar)
         col_indices = []
@@ -159,8 +161,10 @@ def compare_as_dataframe(
         flat_sorted_df_by_features = flat_df.drop(columns="instance").sort_values(by="error").reset_index(drop=False)
         flat_sorted_df_by_instance = flat_df.drop(columns="feature_type").sort_values(by="error").reset_index(drop=False)
         
-        high_error_ordered = flat_sorted_df_by_features["feature_type"].tail(10).value_counts()
-        high_error_features += list(high_error_ordered.reset_index(drop=False)["feature_type"][:2])
+        high_error_ordered = flat_sorted_df_by_features["feature_type"].tail(max_high_errors[splits_idx]).value_counts()
+        high_error_features_idx = list(high_error_ordered.reset_index(drop=False).head(max_high_error_features_to_return[splits_idx])["feature_type"])
+        high_error_features = [col_names[feature_idx] for feature_idx in high_error_features_idx]
+        total_high_error_features += high_error_features
 
         #specify only a `specific type of columns` generate error: see docstring
         if assert_every_features_in_common is None:
@@ -173,10 +177,33 @@ def compare_as_dataframe(
                 #print(flat_sorted_df_by_instance[-300:]["instance"].value_counts())
             else: # if target(Y_train, Y_test), pass 
                 pass
+        elif assert_every_features_in_common == "20250905s":
+            if input_or_tar == "input":
+                ap_set = set()
+                avg_dev_old_mae_set = set()
+                avg_dev_fix_list = []
+                avg_dev_fix_set = set()
+                avg_dev_fix_features = featurizer.config['matminer'][1]['feature']
+                avg_dev_fix_stats = ["mean", "std_dev", "avg_dev"]
+                for aff in avg_dev_fix_features:
+                    for afs in avg_dev_fix_stats:
+                        avg_dev_fix_list.append(f"w_{aff}_{afs}")
+                high_errors_feature_set = set(high_error_features)
+                print(len(high_errors_feature_set))
+                for hf in high_errors_feature_set:
+                    if "ap" in hf:
+                        ap_set.add(hf)
+                    if "avg_dev" in hf:
+                        avg_dev_old_mae_set.add(hf)
+                    if hf in avg_dev_fix_list:
+                        avg_dev_fix_set.add(hf)
+                assert len(high_errors_feature_set - ap_set - avg_dev_fix_set - avg_dev_old_mae_set)==0, high_errors_feature_set - ap_set - avg_dev_old_mae_set - avg_dev_fix_set
+            else:
+                pass
         else:
             raise ValueError(assert_every_features_in_common)
 
-    return [col_names[feature_idx] for feature_idx in high_error_features]
+    return total_high_error_features
 
 def relative_error(live_arrays: list[np.array], snapshot_arrays: list[np.array], return_zero_division_idx:bool = False) -> list[np.array]:
     assert not return_zero_division_idx, NotImplementedError(return_zero_division_idx)
