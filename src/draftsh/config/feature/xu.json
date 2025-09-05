@@ -41,7 +41,7 @@
             ]
         },
         {
-        "src": "magpie",
+            "src": "magpie",
             "unweighted": [
                 "wd"
             ],
@@ -67,8 +67,8 @@
             ],
             "stat": [
                 "mean",
-                "avg_dev",
-                "mae"
+                "std_dev",
+                "avg_dev"
             ]
         },
         {
@@ -98,7 +98,7 @@
             "stat": [
                 "mean",
                 "std_dev",
-                "mae"
+                "avg_dev"
             ],
             "unweighted": [
                 "wd"
@@ -123,7 +123,7 @@
                 "wd"
             ]
         },
-                {
+        {
             "src": "bccfermi",
             "feature": [
                 "bccfermi"
@@ -131,7 +131,7 @@
             "stat": [
                 "mean",
                 "std_dev",
-                "mae"
+                "avg_dev"
             ],
             "unweighted": [
                 "wd"
