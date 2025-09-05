@@ -8,9 +8,14 @@ main features:
     * load XuDataset (see comparison.XuDataset for details)
 
     $ python -m unittest test.py
+
+Todo:
+    * hard-coded warning filters
+    * code refactor: compare_as_dataframe, argument `assert_every_features_in_common`
 """
 
 import unittest
+import warnings
 import importlib.resources as resources
 
 import pandas as pd
@@ -33,6 +38,15 @@ class Test(unittest.TestCase):
         load test version of in-house dataset and featurize, 
         assert reproducing snapshot
         """
+
+        # hard-coded warning filters
+        warnings.filterwarnings("ignore", message="invalid value encountered in scalar divide", lineno=425)
+        warnings.filterwarnings("ignore", message="invalid value encountered in scalar divide", lineno=416)
+        warnings.filterwarnings("ignore", message=r'.*data_source has been specified externally and impute_nan is set to True', lineno=75)
+        warnings.filterwarnings("ignore", message=r'accessing \[mast-ml\]', lineno=326)
+        warnings.filterwarnings("ignore", message=r'accessing \[mast-ml\]', lineno=198)
+
+        # load files
         with resources.as_file(resources.files("draftsh.data.tests") /"dummy") as path:
             data_dir = path.parent #test data dir 
         dataset = Dataset(data_dir.joinpath("test_dataset.xlsx"), config="default.json")
@@ -48,9 +62,11 @@ class Test(unittest.TestCase):
         specific_value(live_data=featurized_np, snapshot=featurized_snapshot, featurizer=featurizer)
         specific_value(live_data=featurized_np, snapshot=featurized_snapshot, featurizer=featurizer, stats=["ap_mean"], specific_idx=(0,7,227))
 
-#        print(compare_as_dataframe(live_arrays=featurized_np, snapshot_arrays=featurized_snapshot,
-#                             dataset=dataset, featurizer=featurizer,
-#                             assert_every_features_in_common="mae_20250904"))
+        high_errors_feature_set = set(compare_as_dataframe(live_arrays=featurized_np, snapshot_arrays=featurized_snapshot,
+                             dataset=dataset, featurizer=featurizer,
+                             max_high_errors=(1979, 1, 622, 1),
+                             max_high_error_features_to_return=(1979, 1, 622, 1),
+                             assert_every_features_in_common=None))
         
         # compare values with snapshot
         pd.testing.assert_frame_equal(dataset_snapshot_df, dataset.dataframe.drop(columns=["comps_pymatgen"]), check_exact=False)
@@ -66,4 +82,3 @@ class Test(unittest.TestCase):
         
 if __name__ == '__main__':
     unittest.main()
-    

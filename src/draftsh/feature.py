@@ -48,6 +48,14 @@ def val_electron_occupation(test_comp, impute_nan: bool = True):
     return np.array(occu4orbits.featurize(comp=test_comp))/np.array(n_valence.featurize(comp=test_comp))
 
 def ionicity(test_comp, impute_nan: bool = True):
+    """ionicity
+
+    following supplement table 2 of Xu et al.(2024) **Not 2025**
+        * [Xu et al 2024](https://www.nature.com/articles/s41524-024-01386-4)
+    $I = 1-e^{1/4 \sum_i{x_i |f_i - \bar{f}|}}$,
+        where $f_i$ is electronegativity.
+    and bool criteria (True if I>1.7 else False)
+    """
     prop=ElementProperty(data_source="deml", features = ["electronegativity",],
                          stats=["mean", "maximum"], impute_nan=impute_nan)
     #for unidentified reason, nan masked(from pandas) inputed with valid floating numbers
@@ -187,8 +195,7 @@ class MyElementProperty(ElementProperty):
             LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
             OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
             SOFTWARE."""
-        warnings.warn("""accessing [mast-ml](https://github.com/uw-cmg/MAST-ML) files, 
-                      with LICENSE: \n"""+self.bccfermi.__doc__, UserWarning)
+        warnings.warn("accessing [mast-ml](https://github.com/uw-cmg/MAST-ML) files, with LICENSE: \n"+self.bccfermi.__doc__, UserWarning)
         with resources.as_file(resources.files("draftsh.data.miscs") /"BCCfermi.csv") as path:
             csv_path = path
         supercon_preprocessed = pd.read_csv(csv_path)
@@ -367,8 +374,10 @@ class MyPropertyStats(PropertyStats):
         """
         iter all data pairs in data_list: list[float]
 
-        weights_rule = "temp": is arbitraly chosen one,
+        weights_rule = "temp": is arbitraly chosen one, to reproduce xu et al (2025)
             * $min_{i<j}(w_{ij} AP_{ij})$, where $w_{ij} = \frac{x_i x_j}{sum_{p<q}{x_p x_q}}$
+            * I don't think AP_miminum is reasonable but if I ignore weight,
+                just 2 same number will be generated(weighted, unweighted).
         """
         if weights_rule!="temp":
             raise NotImplementedError
@@ -390,59 +399,57 @@ class MyPropertyStats(PropertyStats):
         return pairs
 
     @staticmethod
-    def all_aps(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> list[float]:
+    def all_aps(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> tuple[list[float], list[float] | None]:
         """
         return all absolute percentages as a list
         """
         assert weights_rule == "temp", NotImplementedError(weights_rule)
-        assert all([d >= 0.0 for d in data_lst]), ValueError([d >= 0.0 for d in data_lst])
-        list_out = []
+        # it is not defined for negative or near-zero values. 
+        assert all([d >= 0.0 for d in data_lst]), ValueError([d >= 0.0 for d in data_lst]) 
+        ap_out = []
         if len(data_lst)==1:
-            return [0,] #according to the definition of AP_{ij}..
-        elif len(data_lst)>1 and len(data_lst)<30:
+            return [0,], None #according to the definition of AP_{ij}
+        if len(data_lst)>1 and len(data_lst)<100:
             if weights is not None:
+                weight_out = []
                 for da, db, weight in MyPropertyStats.iter_pair(data_lst, weights):
-                    out = weight*np.abs(da-db)/np.mean(da+db)
+                    out = np.abs(da-db)/np.mean((da, db))
                     if np.isnan(out):
+                        assert da==0.0 and db==0.0
                         out = 0.0
-                    list_out.append(out)
+                    ap_out.append(out)
+                    weight_out.append(weight)
+                return ap_out, weight_out
             else:
                 for da, db in MyPropertyStats.iter_pair(data_lst, None):
-                    out = np.abs(da-db)/np.mean(da+db)
+                    out = np.abs(da-db)/np.mean((da, db))
                     if np.isnan(out):
+                        assert da==0.0 and db==0.0
                         out = 0.0
-                    list_out.append(out)
-            return list_out
+                    ap_out.append(out)
+                return ap_out, None
         else:
             raise ValueError(f"len(data_lst):{len(data_lst)}")
 
     @staticmethod
     def ap_mean(data_lst, weights = None):
-        return np.average(MyPropertyStats.all_aps(data_lst, weights))
+        aps, ap_weights = MyPropertyStats.all_aps(data_lst, weights)
+        return np.average(aps, weights=ap_weights)
     
     @staticmethod
     def ap_maximum(data_lst, weights = None):
-        return PropertyStats.maximum(MyPropertyStats.all_aps(data_lst, weights))
+        aps, ap_weights = MyPropertyStats.all_aps(data_lst, weights)
+        if weights is not None:
+            aps = np.multiply(aps, ap_weights)
+        return PropertyStats.maximum(data_lst=aps, weights=weights)
     
     @staticmethod
     def ap_minimum(data_lst, weights = None):
-        return PropertyStats.minimum(MyPropertyStats.all_aps(data_lst, weights))
-
+        aps, ap_weights = MyPropertyStats.all_aps(data_lst, weights)
+        if weights is not None:
+            aps = np.multiply(aps, ap_weights)
+        return PropertyStats.minimum(data_lst=aps, weights=weights)
+    
     @staticmethod
     def ap_range(data_lst, weights = None):
         return MyPropertyStats.ap_maximum(data_lst, weights)-MyPropertyStats.ap_minimum(data_lst, weights)
-    
-    @staticmethod
-    def mae(data_lst, weights = None):
-        mae = 0.0
-        mean = PropertyStats.mean(data_lst, weights)
-        if weights != None:
-            for v, w in zip(data_lst, weights):
-                mae = mae + w*np.abs(v-mean)
-            mae = mae / np.sum(weights)
-        elif weights == None:
-            for v in data_lst:
-                mae = mae + np.abs(v-mean)
-            mae = mae / len(data_lst)
-        return mae
-    
