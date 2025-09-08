@@ -223,7 +223,7 @@ class Featurizer():
         * BCCfremi:
             temporal from MAST-ML
         * xu_eight: bool. 8/909 features of Xu et al (2025)
-        * materials_project: 
+        * (Not Implemented)materials_project:
             elemental properties from materials project api
     """
     def __init__(self, config: dict | str | Path):
