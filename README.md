@@ -4,6 +4,7 @@
 * **Repo for collabs**, not ready for public share yet!
 * Download Dataset from shared Google Drive!
 * Changes: see [changes.md](changes.md)
+    * many errors on feature generation corrected until`f394951`
 
 ## Installation for Development
 ### `Poetry` Virtual Environment (Recommended)
