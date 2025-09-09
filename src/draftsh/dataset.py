@@ -17,7 +17,7 @@ from matminer.featurizers.composition import ElementProperty
 
 from draftsh.parsers import CellParser, FracParser, ElemParser, process_targets
 from draftsh.utils.utils import config_parser
-from draftsh.feature import Featurizer
+from draftsh.feature import MultiSourceFeaturizer
 
 
 #from matminer.featurizers.composition import composite
@@ -57,21 +57,14 @@ class BaseDataset(ABC):
         assert elems.issubset(set([el.symbol for el in Element]))
         return elems
     
-    def pymatgen_comps(self) -> pd.Series:
-        comps_pymatgen = []
-        for _, row in self.dataframe.iterrows():
-            #assert pd.isna(row["Exceptions"])
-            rep_chem_comp=""
-
-            for elem, frac in zip(row["elements"], row["elements_fraction"]):
-                rep_chem_comp+=(f"{elem}{frac}")
-
-            test_comp = Composition(rep_chem_comp)
-            comps_pymatgen.append(test_comp)
-        
+    def pymatgen_comps(self, inplace = True) -> pd.Series | None:
+        comps_pymatgen = self.dataframe.apply(lambda row: Composition(zip(row["elements"], row["elements_fraction"])), axis=1)
         assert len(comps_pymatgen) == len(self.dataframe)
-        self.dataframe["comps_pymatgen"] = comps_pymatgen
-        return self.dataframe["comps_pymatgen"]
+        if inplace:
+            self.dataframe["comps_pymatgen"] = comps_pymatgen
+            return None
+        else:
+            return self.dataframe["comps_pymatgen"]
 
     def assign_dtypes(self):
         for col in self.dataframe.columns:
@@ -156,7 +149,7 @@ class Dataset(XlsxDataset):
         return self.parse_col(colname, cell_parser, False)
     
     def featurize_and_split(self,
-                            featurizer: Featurizer, test_size: float = 0.2,
+                            featurizer: MultiSourceFeaturizer, test_size: float = 0.2,
                             shuffle: bool = True, seed: int = 42,
                             to_numpy: bool = False) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """process target and features(input), split.
@@ -164,7 +157,7 @@ class Dataset(XlsxDataset):
         arguments:
         """
         target_df = process_targets(self.dataframe, targets = self.config["targets"])
-        featurized_df = featurizer.featurize(self.dataframe)
+        featurized_df = featurizer.featurize_all(self.dataframe)
         # featurized_df and target_df
         featurized_df = featurized_df.reset_index(drop=True)
         target_df = target_df.reset_index(drop=True)
@@ -191,7 +184,7 @@ class Dataset(XlsxDataset):
 
 class DLDataset(BaseDataset):
     """
-    mostly copy of XlsxDataset and Dataset. should refactor 
+    mostly copy of XlsxDataset and Dataset. should be refactored
     """
     def __init__(self, data_path: Path | str, drop_cols: list[str] | None = None):
         if isinstance(data_path, str):

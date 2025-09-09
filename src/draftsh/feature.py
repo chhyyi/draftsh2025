@@ -17,6 +17,7 @@ import re
 import math
 from pathlib import Path
 import importlib.resources as resources
+from itertools import combinations
 
 import numpy as np
 import pandas as pd
@@ -24,8 +25,20 @@ import pandas as pd
 from matminer.featurizers.composition import ElementProperty
 from matminer.featurizers.utils.stats import PropertyStats
 
-from draftsh.utils.utils import config_parser
+from draftsh.utils.utils import config_parser, ConfigDictSingle
 import warnings
+
+__all__ = ["Featurizer", "MultiSourceFeaturizer"]
+
+def __getattr__(name):
+    if name == "Featurizer":
+        warnings.warn(
+            "Featurizer is deprecated; use MultiSourceFeaturizer",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return MultiSourceFeaturizer
+    raise AttributeError(name)
 
 # functions to generate 8/909 descriptors of xu 2025
 def mixing_entropy_per_r(fractions):
@@ -136,7 +149,7 @@ class MyElementProperty(ElementProperty):
     def __init__(self, data_source, features, stats, impute_nan=False, unweight: bool = False):
         super().__init__(data_source, features, stats, impute_nan)
         self.unweight = unweight
-        self.pstats = MyPropertyStats() #override
+        self.pstats = CustomPropertyStats() #override
     
     def featurize_uw(self, comp, unweighted: str):
         """
@@ -202,69 +215,85 @@ class MyElementProperty(ElementProperty):
         supercon_dict = supercon_preprocessed.set_index("element").to_dict()['BCCfermi']
         return supercon_dict.get(e.symbol)
 
-class Featurizer():
-    """featurizer for in-house dataset
+class MultiSourceFeaturizer():
+    """featurizer for in-house dataset and features
     
-    config file should be a json file in this structure:
-        {
-            "sources": [source1, source2, source3..],
-            "source1": <some object>,
-            "source2": 
-        }
+    load config, run multiple MyElementProperty class.
+    To apply different set of stats and features combination,
+    Multiple Featurizer(`MyElementProperty` class) will be used
+
+    args:
+        * config: config json file in this structure:
+            {
+                "sources": [source1, source2, source3..],
+                "source1": input configs for the `source1: MyElementProperty()` class,
+                "source2": input configs for the `source2`
+                ...
+            }
 
     currently implemented sources and their values format
-        * matminer: 
-            list[{"src": "magpie" | "pymatgen" | "deml" |...,
-                "feature": list[str(valid feature)],
-                "stat": list[str(valid matminer stat)]}]
-            for matminer's composite.ElementProperty.
-            for valid feature and matminer string,
-                see 
-        * BCCfremi:
-            temporal from MAST-ML
-        * xu_eight: bool. 8/909 features of Xu et al (2025)
-        * (Not Implemented)materials_project:
-            elemental properties from materials project api
+        * matminer_expanded:
+            * requires config json file;
+                list[{"src": "magpie" | "pymatgen" | "deml" |...,
+                    "feature": list[str(valid feature)],
+                    "stat": list[str(valid matminer stat)]}]
+            * additional features
+                * matminer_mastml: 
+                    * [MAST-ML](https://github.com/uw-cmg/MAST-ML) tables
+                    * including BCCfremi, the main descriptor of Xu 2025
+                        
+                * xu_eight: bool. 8/909 features of Xu et al (2025)
+                * (NotImplemented) materials_project: 
+                    elemental properties from materials project api
+
+    config preset:
+        * `xu.json`: reproducing xu et al 2025 except for many elemental properties on Table 1
     """
     def __init__(self, config: dict | str | Path):
         self.config = config_parser(config, mode="feature")
+        self.config = self.init_feature_config()
 
-        assert len(self.config["sources"])>0
-        self.feature_count = {}
-        # init matminer configs
+        assert len(self.config["sources"])>0, self.config["sources"]
+        
+        self.feature_count = {} # feature count by sources
         self.col_names = {}
-        if "matminer" in self.config["sources"]:
-            assert self.config["matminer"]
-            num_matminer_features = 0
-            matminer_col_names = []
-            for srcc in self.config["matminer"]:
-                num_matminer_features += len(srcc["feature"])\
-                    *len(srcc["stat"])*len(srcc.get('unweighted', ["wd"]))
-                
-            for srcc in self.config["matminer"]:
-                for uw in list(srcc.get("unweighted", ["wd"])):
-                    for feat in srcc["feature"]:
-                        for stat in srcc["stat"]:
-                            if uw=="uwd":
-                                uw_flag="uw"
-                            elif uw=="wd":
-                                uw_flag="w"
-                            else:
-                                raise ValueError(f"uw:{uw}")
-                            matminer_col_names.append(f"{uw_flag}_{feat}_{stat}")
-            self.feature_count["matminer_expanded"] = num_matminer_features
-            self.col_names["matminer_expanded"] = matminer_col_names
+
         # init config for 8/909 descriptors of Xu 2025
+    
+    def init_feature_config(self):
+        # init matminer configs
+        for source in self.config["sources"]:
+            if source == "matminer" or "matminer_expanded":
+                self.init_matminer_config(self)
+            elif source == "materials_project":
+                raise NotImplementedError
+            
+        
+    def init_matminer_config(self):
+        assert self.config["matminer"]
+        num_matminer_features = 0
+        matminer_col_names = []
+        for srcc in self.config["matminer"]:
+            num_matminer_features += len(srcc["feature"])\
+                *len(srcc["stat"])*len(srcc.get('unweighted', ["wd"]))
+        
+        for srcc, uw_flag, feat, stat in self.iter_matminer_source(self.config["matminer"]):
+            matminer_col_names.append(f"{uw_flag}_{feat}_{stat}")
+        
+        self.feature_count["matminer_expanded"] = num_matminer_features
+        self.col_names["matminer_expanded"] = matminer_col_names
         if "xu_eight" in self.config["sources"]:
+            raise ValueError("xu_eight is merged with matminer_expanded")
             self.xu_eight: bool = bool(self.config["xu_eight"])
             self.feature_count["xu_eight"] = 8
         # init configs for materials project api
         if "materials_project" in self.config["sources"]:
             raise NotImplementedError
         print(f"featurizer initialized; {self.feature_count}")
-    
+
     def featurize_matminer(self,
-                           data = pd.DataFrame,
+                           data: pd.DataFrame,
+                           config: dict,
                            save_npz_dir: str | None = None,
                            file_name: str | None = "matminer_features.npz",
                            impute_nan: bool = True
@@ -273,21 +302,22 @@ class Featurizer():
             assert Path(save_npz_dir).is_dir(), NotImplementedError(save_npz_dir)
             save_npz_pth = Path(save_npz_dir).joinpath(file_name)
 
-        lendata = len(data)
-        featurized_dset=np.zeros((lendata, self.feature_count["matminer_expanded"]), dtype=float)
+        config = ConfigDictSingle(config)
+        for src, weighted, feautre, stat in config.iter_config():
+            featurized_dset=np.zeros((len(data), self.feature_count["matminer_expanded"]), dtype=float)
         for idx, row in data.iterrows():
             assert pd.isna(row.get("Exceptions", None))
             feature_row = []
             for inp_desc in self.config["matminer"]:
-                for uw in inp_desc.get('unweighted', ["wd",]):
+                for uw in inp_desc.get('unweighted', ["w",]):
                     # process weighted
-                    assert uw=="wd" or uw=="uwd"
+                    assert uw=="w" or uw=="uw"
                     (src, feat, stat)=(inp_desc["src"], inp_desc["feature"], inp_desc["stat"])
                     elem_prop=MyElementProperty(data_source=src, features = feat, stats=stat, impute_nan=impute_nan)
                     feature_row = np.append(feature_row, elem_prop.featurize_uw(comp=row["comps_pymatgen"], unweighted = uw)).flatten()
             featurized_dset[idx] = np.array(feature_row, dtype=float)
             if idx%100==0:
-                print(f"processed matminer features. {idx}/{lendata}")
+                print(f"processed matminer features. {idx}/{len(data)}")
         if save_npz_dir is not None:
             np.savez(save_npz_pth, featurized_dset)
         
@@ -329,45 +359,52 @@ class Featurizer():
 
         return featurized_df
     
-    def featurize(self, df: pd.DataFrame, save_npz_dir: str | None = None) -> pd.DataFrame:
+    def featurize_all(self, df: pd.DataFrame, save_npz_dir: str | None = None, featurized_df: pd.DataFrame | None = None) -> pd.DataFrame:
         """featurize dataframe
 
         arguments:
+            * df: dataframe with "comps_pymatge" column of `pymatgen`'s `Composition` class.
             * save_npz: str | None = None
                 if not none, save processed features of each featurize functions respectedly not a whole one. 
                 should be directory path only
+
+        return:
+            * featurized_df: 
         """
         if save_npz_dir is not None:
             assert(Path(save_npz_dir).is_dir())
-        first = True
-        featurized_df: pd.DataFrame            
+
+        featurized_df = df[["comps_pymatgen"]]
         for src in self.config["sources"]:
-            if src == "matminer":
-
-                src_df = self.featurize_matminer(df, save_npz_dir)
-            elif src == "xu_eight":
-                src_df = self.featurize_xu8(df, save_npz_dir)
+            if src["src"] == "matminer" or src["src"] == "matminer_expanded":
+                featurized_df = self.featurize_matminer(featurized_df, config=src, save_npz_dir=save_npz_dir)
             else:
-                raise NotImplementedError
-            if first:
-                featurized_df = src_df
-                first = False
-            else:
-                shape_df = np.shape(featurized_df)
-                shape_src_df = np.shape(src_df)
-                featurized_df = featurized_df.reset_index(drop=True).join(src_df.reset_index(drop=True))
-                assert np.shape(featurized_df) == (len(df), shape_df[1]+shape_src_df[1])
-            assert len(df) == len(featurized_df)
+                raise NotImplementedError(src["src"])
+        
+        #drop temporal column, "comps_pymatgen"
+        featurized_df.drop(columns=["comps_pymatgen"], inplace=True)
+        assert featurized_df.shape == (len(df), len(self.col_names))
         return featurized_df
+    
+    def merge_feature_dfs(self, src_df: pd.DataFrame, featurized_df: pd.DataFrame, reset_index=True):
+        assert reset_index, NotImplementedError(reset_index)
 
-class MyPropertyStats(PropertyStats):
+        shape_df = np.shape(featurized_df)
+        shape_src_df = np.shape(src_df)
+        featurized_df = featurized_df.reset_index(drop=True).join(src_df.reset_index(drop=True))
+
+        assert featurized_df.shape[1] == shape_df[1]+shape_src_df[1]
+        return featurized_df
+        
+
+class CustomPropertyStats(PropertyStats):
     @staticmethod
     def calc_stat(data_lst, stat, weights=None):
         """
         see super().calc_stat
         """
         statistics = stat.split("::")
-        return getattr(MyPropertyStats, statistics[0])(data_lst, weights, *statistics[1:])
+        return getattr(CustomPropertyStats, statistics[0])(data_lst, weights, *statistics[1:])
         
     @staticmethod
     def iter_pair(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> list[tuple[float, float, float]] | list[tuple[float, float]]:
@@ -381,21 +418,19 @@ class MyPropertyStats(PropertyStats):
         """
         if weights_rule!="temp":
             raise NotImplementedError
-        len_lst = len(data_lst)
-        pairs = []
         if weights is not None:
+            pairs = []
             weights_sum = 0.0
-            for i in range(len_lst):
-                for j in range(i+1, len_lst):
-                    pair_weight = weights[i]*weights[j]
-                    pairs.append([data_lst[i], data_lst[j], pair_weight])
-                    weights_sum += pair_weight
+            for (da, wa), (db, wb) in combinations(zip(data_lst, weights), r=2):
+                pair_weight = wa*wb
+                pairs.append([da, db, pair_weight])
+                weights_sum += pair_weight
             for j, pair in enumerate(pairs):
                 pairs[j][2] = pair[2]/weights_sum
+        elif weights is None:
+            pairs = [(da, db) for da, db in combinations(data_lst)]
         else:
-            for i in range(len_lst):
-                for j in range(i, len_lst):
-                    pairs.append((data_lst[i], data_lst[j]))
+            raise ValueError(weights)
         return pairs
 
     @staticmethod
@@ -412,7 +447,7 @@ class MyPropertyStats(PropertyStats):
         if len(data_lst)>1 and len(data_lst)<100:
             if weights is not None:
                 weight_out = []
-                for da, db, weight in MyPropertyStats.iter_pair(data_lst, weights):
+                for da, db, weight in CustomPropertyStats.iter_pair(data_lst, weights):
                     out = np.abs(da-db)/np.mean((da, db))
                     if np.isnan(out):
                         assert da==0.0 and db==0.0
@@ -421,7 +456,7 @@ class MyPropertyStats(PropertyStats):
                     weight_out.append(weight)
                 return ap_out, weight_out
             else:
-                for da, db in MyPropertyStats.iter_pair(data_lst, None):
+                for da, db in CustomPropertyStats.iter_pair(data_lst, None):
                     out = np.abs(da-db)/np.mean((da, db))
                     if np.isnan(out):
                         assert da==0.0 and db==0.0
@@ -433,23 +468,23 @@ class MyPropertyStats(PropertyStats):
 
     @staticmethod
     def ap_mean(data_lst, weights = None):
-        aps, ap_weights = MyPropertyStats.all_aps(data_lst, weights)
+        aps, ap_weights = CustomPropertyStats.all_aps(data_lst, weights)
         return np.average(aps, weights=ap_weights)
     
     @staticmethod
     def ap_maximum(data_lst, weights = None):
-        aps, ap_weights = MyPropertyStats.all_aps(data_lst, weights)
+        aps, ap_weights = CustomPropertyStats.all_aps(data_lst, weights)
         if weights is not None:
             aps = np.multiply(aps, ap_weights)
         return PropertyStats.maximum(data_lst=aps, weights=weights)
     
     @staticmethod
     def ap_minimum(data_lst, weights = None):
-        aps, ap_weights = MyPropertyStats.all_aps(data_lst, weights)
+        aps, ap_weights = CustomPropertyStats.all_aps(data_lst, weights)
         if weights is not None:
             aps = np.multiply(aps, ap_weights)
         return PropertyStats.minimum(data_lst=aps, weights=weights)
     
     @staticmethod
     def ap_range(data_lst, weights = None):
-        return MyPropertyStats.ap_maximum(data_lst, weights)-MyPropertyStats.ap_minimum(data_lst, weights)
+        return CustomPropertyStats.ap_maximum(data_lst, weights)-CustomPropertyStats.ap_minimum(data_lst, weights)
