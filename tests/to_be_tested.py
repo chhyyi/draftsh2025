@@ -1,7 +1,7 @@
 import pandas as pd
 
 from draftsh.dataset import Dataset, DLDataset
-from draftsh.feature import Featurizer
+from draftsh.feature import MultiSourceFeaturizer
 from draftsh.comparison import StanevSuperCon, XuTestHEA
 
 # %% Load XuDataset, StanevSuperCon and featurize
@@ -11,11 +11,11 @@ if True:
     ss_dataset.pymatgen_comps()
 
     xu_test_set = XuTestHEA()
-    featurizer = Featurizer(config=r"xu.json")
+    featurizer = MultiSourceFeaturizer(config=r"xu.json")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=UserWarning)
         warnings.filterwarnings("ignore", message = "invalid value encountered in scalar divide")
-        ss_featurized_df = featurizer.featurize(ss_dataset.dataframe, save_npz_dir=r"C:\Users\chyi\draftsh2025\temp_devs\supercon_features_temp")
+        ss_featurized_df = featurizer.featurize_all(ss_dataset.dataframe, save_npz_dir=r"C:\Users\chyi\draftsh2025\temp_devs\supercon_features_temp")
 
 #%%
     ss_featurized_df.to_json("temp.json", indent=4)

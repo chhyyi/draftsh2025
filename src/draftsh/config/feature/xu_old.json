@@ -5,6 +5,10 @@
     "matminer_expanded": [
         {
             "src": "magpie",
+            "unweighted": [
+                "uw",
+                "w"
+            ],
             "feature": [
                 "Column",
                 "Row",
@@ -26,20 +30,41 @@
                 "SpaceGroupNumber"
             ],
             "stat": [
-                "minimum::uw",
-                "maximum::uw",
-                "range::uw",
-                "ap_mean::uw",
-                "ap_minimum::uw",
-                "ap_maximum::uw",
-                "ap_range::uw",
-                "minimum::w",
-                "maximum::w",
-                "range::w",
-                "ap_mean::w",
-                "ap_minimum::w",
-                "ap_maximum::w",
-                "ap_range::w",
+                "minimum",
+                "maximum",
+                "range",
+                "ap_mean",
+                "ap_minimum",
+                "ap_maximum",
+                "ap_range"
+            ]
+        },
+        {
+            "src": "magpie",
+            "unweighted": [
+                "w"
+            ],
+            "feature": [
+                "Column",
+                "Row",
+                "CovalentRadius",
+                "Electronegativity",
+                "NsValence",
+                "NpValence",
+                "NdValence",
+                "NfValence",
+                "NValence",
+                "NsUnfilled",
+                "NpUnfilled",
+                "NdUnfilled",
+                "NfUnfilled",
+                "NUnfilled",
+                "FirstIonizationEnergy",
+                "GSestBCClatcnt",
+                "GSvolume_pa",
+                "SpaceGroupNumber"
+            ],
+            "stat": [
                 "mean",
                 "std_dev",
                 "avg_dev"
@@ -51,23 +76,46 @@
                 "thermal_conductivity"
             ],
             "stat": [
-                "minimum::uw",
-                "maximum::uw",
-                "range::uw",
-                "ap_mean::uw",
-                "ap_minimum::uw",
-                "ap_maximum::uw",
-                "ap_range::uw",
-                "minimum::w",
-                "maximum::w",
-                "range::w",
-                "ap_mean::w",
-                "ap_minimum::w",
-                "ap_maximum::w",
-                "ap_range::w",
+                "minimum",
+                "maximum",
+                "range",
+                "ap_mean",
+                "ap_minimum",
+                "ap_maximum",
+                "ap_range"
+            ],
+            "unweighted": [
+                "uw",
+                "w"
+            ]
+        },
+        {
+            "src": "pymatgen",
+            "feature": [
+                "thermal_conductivity"
+            ],
+            "stat": [
                 "mean",
                 "std_dev",
                 "avg_dev"
+            ],
+            "unweighted": [
+                "w"
+            ]
+        },
+        {
+            "src": "bccfermi",
+            "feature": [
+                "bccfermi"
+            ],
+            "stat": [
+                "minimum",
+                "maximum",
+                "range",
+                "ap_mean",
+                "ap_minimum",
+                "ap_maximum",
+                "ap_range"
             ],
             "unweighted": [
                 "uw",
@@ -80,23 +128,12 @@
                 "bccfermi"
             ],
             "stat": [
-                "minimum::uw",
-                "maximum::uw",
-                "range::uw",
-                "ap_mean::uw",
-                "ap_minimum::uw",
-                "ap_maximum::uw",
-                "ap_range::uw",
-                "minimum::w",
-                "maximum::w",
-                "range::w",
-                "ap_mean::w",
-                "ap_minimum::w",
-                "ap_maximum::w",
-                "ap_range::w",
                 "mean",
                 "std_dev",
                 "avg_dev"
+            ],
+            "unweighted": [
+                "w"
             ]
         },
         {

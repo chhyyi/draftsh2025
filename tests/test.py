@@ -25,7 +25,7 @@ from numpy.testing import assert_almost_equal
 from sklearn.metrics import r2_score
 
 from draftsh.dataset import Dataset
-from draftsh.feature import Featurizer
+from draftsh.feature import MultiSourceFeaturizer
 from draftsh.comparison import XuTestHEA
 from draftsh.utils.test_utils import specific_value, compare_as_dataframe
 
@@ -53,7 +53,7 @@ class Test(unittest.TestCase):
         dataset_snapshot_df = pd.read_json(data_dir.joinpath("snapshot_dataset.json"), orient="table")
 
         # test featurized dataset
-        featurizer = Featurizer(config=r"xu.json")
+        featurizer = MultiSourceFeaturizer(config=r"xu.json")
         featurized_np = dataset.featurize_and_split(featurizer=featurizer, test_size=0.2, shuffle=False, to_numpy=True)
         npz_loaded = np.load(data_dir.joinpath("snapshot_featurized.npz"), allow_pickle=False)
         featurized_snapshot = [npz_loaded["x_train"], npz_loaded["y_train"], npz_loaded["x_test"], npz_loaded["y_test"]]
@@ -79,6 +79,24 @@ class Test(unittest.TestCase):
         r2score = r2_score(xu_dataset.dataframe["Experimental_T_c(K)"], xu_dataset.dataframe["Predicted_T_c(K)"])
         print(f"r2_score:{r2score}")
         self.assertAlmostEqual(r2score, 0.9246, places=4)
+    
+    def test_notebook(self):
+        # trying to keep compatibility with 
+        # keep compatibility with https://colab.research.google.com/drive/1SUAELDp_BLy62RK5ilqmMbG0QMEvP-J3
+        
+        dataset = Dataset("/content/sample_data/inhouse_dataset_merged_0810.xlsx", config="default.json")
+
+        # dataset.dataframe is pandas DataFrame
+        assert isinstance(dataset.dataframe, pd.DataFrame)
+
+        # get featurized dataset
+        featurizer = MultiSourceFeaturizer(config=r"test.json")
+        featurized_dfs = dataset.featurize_and_split(featurizer=featurizer, test_size=0.2, shuffle=False, to_numpy=False)
+        X_train, Y_train, X_test, Y_test = featurized_dfs
+
+        # matminer warnings are too long..
         
 if __name__ == '__main__':
-    unittest.main()
+    Test().test_dataset() #for debug
+    #unittest.main()
+    # 
