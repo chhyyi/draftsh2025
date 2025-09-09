@@ -17,10 +17,8 @@ Todo:
 
 """
 from abc import ABC, abstractmethod
-import json
 from typing import Callable
-import re
-import math
+import re, math, ast, fractions
 
 from pymatgen.core.periodic_table import Element
 import pandas as pd
@@ -44,9 +42,41 @@ class CellParser(ABC):
         self.policy=policy
 
     @abstractmethod
-    def parse(self, inp: str) -> object:
-        pass
+    def parse(self, inp: str) -> any:
+        raise NotImplementedError("self.parse()")
+    
+    def num_string_parser(self, v: str, uncertainty: bool = False, as_float: bool = True):
+        """parsing string of a number
 
+        args:
+            * inp: string of a number. It can be a fraction or floats with uncertainty.
+        """
+        if uncertainty:
+            raise NotImplementedError(uncertainty)
+        if not as_float:
+            raise NotImplementedError(as_float)
+        
+        assert isinstance(v, str)
+        if "(" in v: 
+            # number with uncertainty. then, it cannot be a fraction
+            assert v.strip()[-1]==")",v.strip()[-1]
+            _ = v[v.find("("):-1] # uncertainty not implemented
+            v=ast.literal_eval(v[:v.find("(")])
+        elif "/" in v:
+            frac_pos=v.find("/")
+            numerator = ast.literal_eval(v[:frac_pos])
+            denominator = ast.literal_eval(v[frac_pos+1:])
+            assert isinstance(numerator, int), numerator
+            assert isinstance(denominator, int), denominator
+            v=fractions.Fraction(numerator, denominator)
+        else:
+            pass
+
+        if as_float and not uncertainty:
+            return float(v)
+        else:
+            raise NotImplementedError(as_float, not uncertainty)
+    
 class ElemParser(CellParser):
     """
     parsing elements columns of the dataset
@@ -56,8 +86,7 @@ class ElemParser(CellParser):
 
     def parse(self, val: str) -> list[str]:
         elements_in_ptable = [el.symbol for el in Element]
-        val = str(val).replace("'",'"')
-        val = json.loads(val)
+        val = ast.literal_eval(val)
         assert all([x in elements_in_ptable for x in val]), f"Elements list {val} should include only elements symbols"
         return val
 
@@ -65,31 +94,30 @@ class FracParser(CellParser):
     """parse string of frac lists"""
     def __init__(self, policy="frac"):
         super().__init__(policy)
-    def temp_parser(self, v):
-        """temp parser
+
+    def parse(self, fracs, multiphase_rule: str | None = "nominal", as_float: bool = True):
+        """ parse elemental_fractions as list of numbers
+        
+        args:
+            * multiphase_rule:
+                if "nominal", use fracs["nominal"].
         """
-        assert isinstance(v, str)
-        if "(" in v:
-            v=v[:v.find("(")]
-        elif "/" in v:
-            frac_pos=v.find("/")
-            v=float(v[:frac_pos])/float(v[frac_pos+1:])
-        else:
-            v=float(v)
-        return v
-
-    # parse elemental_fractions as list
-    def parse(self, fracs):
-        fracs = str(fracs).replace("'",'"')
-        fracs = json.loads(fracs)
+        fracs = ast.literal_eval(fracs)
+        out: list[int] = []
         if isinstance(fracs, dict):
-            fracs = fracs["nominal"] #Todo
-        for idx, v in enumerate(fracs):
+            if multiphase_rule == "nominal":
+                fracs = fracs["nominal"]
+            else: 
+                raise NotImplementedError(multiphase_rule)
+        for v in fracs:
             if isinstance(v, str):
-                fracs[idx]=self.temp_parser(v)
-
-        assert isinstance(fracs, list)
-        return fracs
+                out.append(self.num_string_parser(v, as_float = as_float))
+            else:
+                assert isinstance(v, float) or isinstance(v, int), ValueError(v)
+                out.append(float(v))
+        assert isinstance(out, list)
+        assert len(fracs) == len(out)
+        return out
 
 # other functions that requires iterate whole data
 

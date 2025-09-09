@@ -13,10 +13,10 @@ import numpy as np
 from pymatgen.core.composition import Composition
 
 from draftsh.dataset import Dataset
-from draftsh.feature import Featurizer, MyElementProperty
+from draftsh.feature import MultiSourceFeaturizer, MyElementProperty
 
 def specific_value(
-        live_data: list[np.array], snapshot: list[np.array], featurizer: Featurizer,
+        live_data: list[np.array], snapshot: list[np.array], featurizer: MultiSourceFeaturizer,
         comp: str = "Ru0.075Rh0.075Pd0.075Ir0.075Pt0.70Sb",
         specific_idx: tuple[int] = (0, 7, 28),
         source: str = "magpie", feature: list[str] = ["NpValence"],
@@ -75,7 +75,7 @@ def specific_value(
 
 def compare_as_dataframe(
         live_arrays: list[np.array], snapshot_arrays: list[np.array],
-        dataset: Dataset, featurizer: Featurizer,
+        dataset: Dataset, featurizer: MultiSourceFeaturizer,
         max_high_errors: tuple[int, int, int, int] = (10, 1, 10, 1),
         max_high_error_features_to_return: tuple[int, int, int, int] = (2, 1, 2, 1),
         assert_every_features_in_common: str | None = None
