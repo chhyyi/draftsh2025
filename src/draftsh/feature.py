@@ -24,8 +24,9 @@ import pandas as pd
 
 from matminer.featurizers.composition import ElementProperty
 from matminer.featurizers.utils.stats import PropertyStats
+from matminer.utils.data import AbstractData
 
-from draftsh.utils.utils import config_parser, ConfigDictSingle
+from draftsh.utils.utils import config_parser, ConfigSingleSource
 import warnings
 
 __all__ = ["Featurizer", "MultiSourceFeaturizer"]
@@ -146,7 +147,7 @@ class MyElementProperty(ElementProperty):
     """
     def featurize_uw to 'unweight'.
     """
-    def __init__(self, data_source, features, stats, impute_nan=False, unweight: bool = False):
+    def __init__(self, data_source: AbstractData, features: list[str], stats: list[str], impute_nan=False, unweight: bool = False):
         super().__init__(data_source, features, stats, impute_nan)
         self.unweight = unweight
         self.pstats = CustomPropertyStats() #override
@@ -250,38 +251,33 @@ class MultiSourceFeaturizer():
         * `xu.json`: reproducing xu et al 2025 except for many elemental properties on Table 1
     """
     def __init__(self, config: dict | str | Path):
-        self.config = config_parser(config, mode="feature")
-        self.config = self.init_feature_config()
+        config = config_parser(config, mode="feature")
 
         assert len(self.config["sources"])>0, self.config["sources"]
-        
-        self.feature_count = {} # feature count by sources
-        self.col_names = {}
 
+        self.feature_count, self.col_names = self.init_feature_config(config)
         # init config for 8/909 descriptors of Xu 2025
     
-    def init_feature_config(self):
+    def init_feature_config(self, config: dict):
         # init matminer configs
-        for source in self.config["sources"]:
-            if source == "matminer" or "matminer_expanded":
-                self.init_matminer_config(self)
-            elif source == "materials_project":
-                raise NotImplementedError
-            
-        
-    def init_matminer_config(self):
-        assert self.config["matminer"]
         num_matminer_features = 0
         matminer_col_names = []
-        for srcc in self.config["matminer"]:
-            num_matminer_features += len(srcc["feature"])\
-                *len(srcc["stat"])*len(srcc.get('unweighted', ["wd"]))
+        for source in config["sources"]:
+            if source == "matminer" or source == "matminer_expanded":
+                assert isinstance(config[source], list), f"config[source] should be a list of dictionaries but: {config[source]}"
+                for config_1source in config[source]:
+                    config_single_source = ConfigSingleSource(config_1source)
+                    num_matminer_features += len(config_single_source)
+                    for srcc, feat, stat in config_single_source.iter_config():
+                        matminer_col_names.append(f"{srcc}_{feat}_{stat.replace("::","_")}")
+            elif source == "materials_project":
+                raise NotImplementedError(source)
+            else:
+                raise ValueError(source)
+        return num_matminer_features, matminer_col_names
         
-        for srcc, uw_flag, feat, stat in self.iter_matminer_source(self.config["matminer"]):
-            matminer_col_names.append(f"{uw_flag}_{feat}_{stat}")
+
         
-        self.feature_count["matminer_expanded"] = num_matminer_features
-        self.col_names["matminer_expanded"] = matminer_col_names
         if "xu_eight" in self.config["sources"]:
             raise ValueError("xu_eight is merged with matminer_expanded")
             self.xu_eight: bool = bool(self.config["xu_eight"])
@@ -290,6 +286,7 @@ class MultiSourceFeaturizer():
         if "materials_project" in self.config["sources"]:
             raise NotImplementedError
         print(f"featurizer initialized; {self.feature_count}")
+        return 
 
     def featurize_matminer(self,
                            data: pd.DataFrame,
@@ -302,8 +299,8 @@ class MultiSourceFeaturizer():
             assert Path(save_npz_dir).is_dir(), NotImplementedError(save_npz_dir)
             save_npz_pth = Path(save_npz_dir).joinpath(file_name)
 
-        config = ConfigDictSingle(config)
-        for src, weighted, feautre, stat in config.iter_config():
+        config_1source = ConfigSingleSource(config)
+        for src, weighted, feautre, stat in config_1source.iter_config():
             featurized_dset=np.zeros((len(data), self.feature_count["matminer_expanded"]), dtype=float)
         for idx, row in data.iterrows():
             assert pd.isna(row.get("Exceptions", None))
@@ -428,7 +425,7 @@ class CustomPropertyStats(PropertyStats):
             for j, pair in enumerate(pairs):
                 pairs[j][2] = pair[2]/weights_sum
         elif weights is None:
-            pairs = [(da, db) for da, db in combinations(data_lst)]
+            pairs = [(da, db) for da, db in combinations(data_lst, r=2)]
         else:
             raise ValueError(weights)
         return pairs
