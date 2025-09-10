@@ -18,13 +18,14 @@ import math
 from pathlib import Path
 import importlib.resources as resources
 from itertools import combinations
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 
 from matminer.featurizers.composition import ElementProperty
 from matminer.featurizers.utils.stats import PropertyStats
-from matminer.utils.data import AbstractData
+from matminer.utils.data import AbstractData, OxidationStatesMixin, MagpieData
 
 from draftsh.utils.utils import config_parser, ConfigSingleSource
 import warnings
@@ -66,7 +67,7 @@ def ionicity(test_comp, impute_nan: bool = True):
 
     following supplement table 2 of Xu et al.(2024) **Not 2025**
         * [Xu et al 2024](https://www.nature.com/articles/s41524-024-01386-4)
-    $I = 1-e^{1/4 \sum_i{x_i |f_i - \bar{f}|}}$,
+    $I = 1-e^{1/4 \\sum_i{x_i |f_i - \\bar{f}|}}$,
         where $f_i$ is electronegativity.
     and bool criteria (True if I>1.7 else False)
     """
@@ -143,6 +144,28 @@ def parse_value_with_uncertainty(s: str):
 
     return {"mean":float(mean), "std": float(std)}
 
+class MastMLMagpieData(MagpieData):
+    """
+    all I need to change is the MagpieData.data_dir when its instance is initiallized.
+    But its super(self).__init__() is too long without defining any functions so hard to override
+    """
+    def __init__(self, impute_nan: bool):
+        #dummy_magpie = MagpieData(impute_nan=impute_nan)
+        super().__init__(impute_nan=impute_nan)
+        self.dummy_data_dir = self.data_dir
+        with patch('matminer.utils.data.os.path.join', new = self.path_hack):
+            self.path_hack_worked = False
+            super().__init__(impute_nan=impute_nan)
+    
+    def path_hack(self, *args):
+        if not self.path_hack_worked:
+            assert Path(args[0])==Path(self.dummy_data_dir).parent.parent, (args, self.dummy_data_dir)
+            with resources.as_file(resources.files("draftsh.data.miscs.vendor.mastml.mastml.magpie")) as path:
+                self.path_hack_worked = True
+                return path
+        else:
+            return Path(args[0]).joinpath(*args[1:])
+
 class MyElementProperty(ElementProperty):
     """
     def featurize_uw to 'unweight'.
@@ -150,13 +173,17 @@ class MyElementProperty(ElementProperty):
     def __init__(self, data_source: AbstractData, features: list[str], stats: list[str], impute_nan=False, unweight: bool = False):
         super().__init__(data_source, features, stats, impute_nan)
         self.unweight = unweight
-        self.pstats = CustomPropertyStats() #override
-    
+        assert unweight == False, NotImplementedError
+        self.pstats = CustomPropertyStats() #overrided
+        if data_source == "mast-ml":
+            self.data_source = MastMLMagpieData(impute_nan = self.impute_nan)
+
     def featurize_uw(self, comp, unweighted: str):
         """
         if unweight, `fractions = None`
         mostly copy of ElementryProperty.featurize
         """
+        warnings.deprecated(f"featurize_uw is deprecated, let {CustomPropertyStats.__name__} handle weight")
         if unweighted == "uwd":
             all_attributes = []
             elements, _ = zip(*comp.element_composition.items())
@@ -251,11 +278,10 @@ class MultiSourceFeaturizer():
         * `xu.json`: reproducing xu et al 2025 except for many elemental properties on Table 1
     """
     def __init__(self, config: dict | str | Path):
-        config = config_parser(config, mode="feature")
+        self.config = config_parser(config, mode="feature")
 
         assert len(self.config["sources"])>0, self.config["sources"]
-
-        self.feature_count, self.col_names = self.init_feature_config(config)
+        self.feature_count, self.col_names = self.init_feature_config(self.config)
         # init config for 8/909 descriptors of Xu 2025
     
     def init_feature_config(self, config: dict):
@@ -291,16 +317,29 @@ class MultiSourceFeaturizer():
     def featurize_matminer(self,
                            data: pd.DataFrame,
                            config: dict,
+                           comps_col: str = "comps_pymatgen",
                            save_npz_dir: str | None = None,
                            file_name: str | None = "matminer_features.npz",
-                           impute_nan: bool = True
+                           impute_nan: bool = True,
                            ) -> pd.DataFrame:
+        """ return results of `Featurizer.featurize_dataframe`
+
+        For `featurize_dataframe`, see `matminer.featurizers.base.BaseFeaturizer()`
+
+        args:
+            * pandas.DataFrame with `comps_pymatgen` column
+                * `comps_pymatgen` column: pymatgen....Composition object
+            * config: for single source, shoud have "src", "feature", "stat" keys.
+        """
         if save_npz_dir is not None:
             assert Path(save_npz_dir).is_dir(), NotImplementedError(save_npz_dir)
             save_npz_pth = Path(save_npz_dir).joinpath(file_name)
-
+        for config_single_source in config:
+            featurizer = MyElementProperty(config_single_source["src"], config_single_source["feature"], config_single_source["stat"])
+            featurized_df = featurizer.featurize_dataframe(data, col_id = comps_col, inplace=False)
+        return featurized_df
         config_1source = ConfigSingleSource(config)
-        for src, weighted, feautre, stat in config_1source.iter_config():
+        for src, feautre, stat in config_1source.iter_config():
             featurized_dset=np.zeros((len(data), self.feature_count["matminer_expanded"]), dtype=float)
         for idx, row in data.iterrows():
             assert pd.isna(row.get("Exceptions", None))
@@ -373,8 +412,8 @@ class MultiSourceFeaturizer():
 
         featurized_df = df[["comps_pymatgen"]]
         for src in self.config["sources"]:
-            if src["src"] == "matminer" or src["src"] == "matminer_expanded":
-                featurized_df = self.featurize_matminer(featurized_df, config=src, save_npz_dir=save_npz_dir)
+            if src == "matminer" or src == "matminer_expanded":
+                featurized_df = self.featurize_matminer(featurized_df, config=self.config[src], save_npz_dir=save_npz_dir)
             else:
                 raise NotImplementedError(src["src"])
         
@@ -395,13 +434,42 @@ class MultiSourceFeaturizer():
         
 
 class CustomPropertyStats(PropertyStats):
-    @staticmethod
-    def calc_stat(data_lst, stat, weights=None):
+    def __init__(self):
+        self.all_aps: tuple[list, None] | tuple[list, list] = None
+        self.init_ap_inputs: tuple[list,list] | tuple[list, None] | None = None
+
+    def call_ap(self, data_lst: list[float], weights: list[float] | None, weights_rule = "temp"):
+        if (data_lst, weights) == self.init_ap_inputs:
+            pass
+        else:
+            self.all_aps = self.init_all_aps(data_lst, weights, weights_rule = weights_rule)
+        return self.all_aps
+
+    def calc_stat(self, data_lst, stat, weights=None):
         """
-        see super().calc_stat
+        override to handle 
+            * weighted/unweighted stats 
+            * and aps.
+
+        see `super().calc_stat` for further
         """
-        statistics = stat.split("::")
-        return getattr(CustomPropertyStats, statistics[0])(data_lst, weights, *statistics[1:])
+
+        if "::" in stat:
+            statistics = stat.split("::")
+            if len(statistics)==2:
+                unweighted = statistics.pop()
+                if unweighted=="uw":
+                    weights = None
+                elif unweighted=="w":
+                    pass
+                else:
+                    raise NotImplementedError("I did not considered to use some extra statistics parameters except for the `unweighted: 'uw' | 'w'`.")
+            else:
+                raise NotImplementedError("I did not considered to use some extra statistics parameters except for the `unweighted: 'uw' | 'w'`.")
+
+        else:
+            statistics = [stat]
+        return getattr(self, statistics[0])(data_lst, weights, *statistics[1:])
         
     @staticmethod
     def iter_pair(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> list[tuple[float, float, float]] | list[tuple[float, float]]:
@@ -431,7 +499,7 @@ class CustomPropertyStats(PropertyStats):
         return pairs
 
     @staticmethod
-    def all_aps(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> tuple[list[float], list[float] | None]:
+    def init_all_aps(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> tuple[list[float], list[float] | None]:
         """
         return all absolute percentages as a list
         """
@@ -463,25 +531,21 @@ class CustomPropertyStats(PropertyStats):
         else:
             raise ValueError(f"len(data_lst):{len(data_lst)}")
 
-    @staticmethod
-    def ap_mean(data_lst, weights = None):
-        aps, ap_weights = CustomPropertyStats.all_aps(data_lst, weights)
+    def ap_mean(self, data_lst, weights = None):
+        aps, ap_weights = self.call_ap(data_lst, weights)
         return np.average(aps, weights=ap_weights)
     
-    @staticmethod
-    def ap_maximum(data_lst, weights = None):
-        aps, ap_weights = CustomPropertyStats.all_aps(data_lst, weights)
+    def ap_maximum(self, data_lst, weights = None):
+        aps, ap_weights = self.call_ap(data_lst, weights)
         if weights is not None:
             aps = np.multiply(aps, ap_weights)
         return PropertyStats.maximum(data_lst=aps, weights=weights)
     
-    @staticmethod
-    def ap_minimum(data_lst, weights = None):
-        aps, ap_weights = CustomPropertyStats.all_aps(data_lst, weights)
+    def ap_minimum(self, data_lst, weights = None):
+        aps, ap_weights = self.call_ap(data_lst, weights)
         if weights is not None:
             aps = np.multiply(aps, ap_weights)
         return PropertyStats.minimum(data_lst=aps, weights=weights)
     
-    @staticmethod
-    def ap_range(data_lst, weights = None):
-        return CustomPropertyStats.ap_maximum(data_lst, weights)-CustomPropertyStats.ap_minimum(data_lst, weights)
+    def ap_range(self, data_lst, weights = None):
+        return self.ap_maximum(data_lst, weights)-self.ap_minimum(data_lst, weights)

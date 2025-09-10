@@ -75,7 +75,7 @@
             ]
         },
         {
-            "src": "bccfermi",
+            "src": "mast-ml",
             "feature": [
                 "bccfermi"
             ],
@@ -100,17 +100,18 @@
             ]
         },
         {
-            "src": "xu_eigth",
-            "feature": ["configurational_entropy"]
+            "src": "magpie",
+            "feature": ["configurational_entropy"],
+            "stat": ["self"]
         },
         {
-            "src": "xu_eight",
+            "src": "magpie",
             "feature": ["occu_ve"],
             "stat": ["p", "s", "d", "f"],
             "description": "Occupation states of valenece electron, shown in Table 2 of Xu, S. Predicting superconducting temperatures with new hierarchical neural network AI model. Front. Phys. 20, 14205 (2025)."
         },
         {
-            "src": "xu_eight",
+            "src": "inhouse",
             "feature": ["ionicity"],
             "stat": ["mean", "maximum", "bool"]
         }
