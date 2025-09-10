@@ -2,6 +2,7 @@
 ## since `f394951` (Sep 1, 2025)
 * regenerated snapshot; fixed `draftsh.parsers.FracParser()`, not to leave `list[str]`.
 * merged `xu_eight` features as a matminer inherited classes.
+
 ## since `0d1d5d9` (Sep 4, 2025)
 ### Code changes:  
 * mae: duplicate of PropertyStats.avg_dev so removed.

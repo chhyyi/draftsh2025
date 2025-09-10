@@ -2,6 +2,7 @@
 name = "draftsh"
 version = "0.1.0"
 description = "load in-house datset and featurize, export to numpy.array or pandas.DataFrame"
+license = "MIT"
 authors = [
     {name = "changhyun yi",email = "chhyyi@gmail.com"}
 ]
@@ -17,7 +18,10 @@ dependencies = [
 
 [tool.poetry]
 packages = [{include = "draftsh", from = "src"}]
-
+include = [
+  { path = "mypackage/src/draftsh/data/miscs/vendor/mastml/LICENSE" },
+  { path = "mypackage/src/draftsh/data/miscs/vendor/mastml/README.md" },
+]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
