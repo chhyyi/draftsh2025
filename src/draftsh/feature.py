@@ -53,47 +53,6 @@ def mixing_entropy_per_r(fractions):
     arr = np.array(fractions, dtype=float)
     return -np.sum(arr * np.log(arr))
 
-def val_electron_occupation(test_comp, impute_nan: bool = True):
-    """
-    occupation state of valence electron
-    """
-    orbs = ["NsValence", "NpValence", "NdValence", "NfValence",]
-    occu4orbits=ElementProperty(data_source="magpie", features = orbs,
-                                stats=["mean"], impute_nan=impute_nan)
-    n_valence=ElementProperty(data_source="magpie", features = ["NValence"],
-                              stats=["mean"], impute_nan=impute_nan)
-    return np.array(occu4orbits.featurize(comp=test_comp))/np.array(n_valence.featurize(comp=test_comp))
-
-def ionicity(test_comp, impute_nan: bool = True):
-    """ionicity
-
-    following supplement table 2 of Xu et al.(2024) **Not 2025**
-        * [Xu et al 2024](https://www.nature.com/articles/s41524-024-01386-4)
-    $I = 1-e^{1/4 \\sum_i{x_i |f_i - \\bar{f}|}}$,
-        where $f_i$ is electronegativity.
-    and bool criteria (True if I>1.7 else False)
-    """
-    prop=ElementProperty(data_source="magpie", features = ["Electronegativity",],
-                         stats=["mean", "maximum"], impute_nan=impute_nan)
-    #for unidentified reason, nan masked(from pandas) inputed with valid floating numbers
-
-    mean_ene, max_ene = prop.featurize(test_comp)
-    elems, fracs = zip(*test_comp.element_composition.items())
-    enes = [float(prop.data_source.get_elemental_property(e, "Electronegativity")) for e in elems]
-
-    if pd.isna(enes).any():
-        print(f"is_nan enes, fracs:{fracs}, {pd.isna(enes)}, \
-              elem:{elems}, types:{[type(ene) for ene in enes]}, \
-                np.ma.is_masked:{[np.ma.is_masked(ene) for ene in enes]}")
-    def ionicity_calc(fracs, enes, criteria):
-        sum_sum=np.sum([frac*np.abs(ene-criteria) for ene, frac in zip(enes, fracs)])
-        return 1-np.exp(-(1/4)*sum_sum)
-
-    ion_mean = ionicity_calc(fracs, enes, mean_ene)
-    ion_max = ionicity_calc(fracs, enes, max_ene)
-
-    return ion_mean, ion_max, 1 if ion_mean>1.7 else 0
-
 # parse string of a float with uncertainty
 def parse_value_with_uncertainty(s: str):
     """
@@ -206,7 +165,9 @@ class MyElementProperty(ElementProperty):
 
 class InhouseSecondary(AbstractData):
     """
-    secondary features, rather complex to be a `stat`, using elemental features from MagpieData
+    secondary features, using elemental features from MagpieData
+    
+    implemeneted 8 descriptors of table 2 of xu et al 2025.
     """
     def __init__(self, configs: dict, impute_nan: bool = False):
         assert impute_nan==False
@@ -215,19 +176,68 @@ class InhouseSecondary(AbstractData):
         self.available_props=[]
         self.config_per_sources = [ConfigSingleSource(config_1source) for config_1source in configs]
     
-        self.first_properties=["NsValence", "NpValence", "NdValence", "NfValence","Electronegativity"]
+        self.first_properties=["NsValence", "NpValence", "NdValence", "NfValence", "NValence", "Electronegativity"]
         magpie_data = MagpieData(data_dir=None, impute_nan=impute_nan, features=self.first_properties)
-        self.xu_eights_init()
+        self.xu_eights_init(magpie_data)
+        self.
         # using old functions for xu8, calc table
 
     def xu_eights_init(self):
         for config_1source in self.config_per_sources:
-            for srcc, feat, stat in config_1source.iter_config():
-                self.available_props.append(f"{srcc}_{feat}_{stat}")
-                for el in Element:
-                    self.all_elemental_props[feat][el.symbol]=getattr(self, feat)(el)
+            for names in config_1source.iter_config():
+                self.available_props.append("_".join(names))
+        
+    def configurational_entropy(self, _):
+        """it depends only on fractions"""
+        return 1
+    
+    def occu_ve_init(self, magpie_data):
+        for el in Element:
+            self.all_elemental_props[""]
+        return {"s": magpie_data,}
+        
 
-                
+    def val_electron_occupation(test_comp, impute_nan: bool = True):
+        """
+        occupation state of valence electron
+        """
+        orbs = ["NsValence", "NpValence", "NdValence", "NfValence",]
+        occu4orbits=ElementProperty(data_source="magpie", features = orbs,
+                                    stats=["mean"], impute_nan=impute_nan)
+        n_valence=ElementProperty(data_source="magpie", features = ["NValence"],
+                                stats=["mean"], impute_nan=impute_nan)
+        return np.array(occu4orbits.featurize(comp=test_comp))/np.array(n_valence.featurize(comp=test_comp))
+
+    def ionicity(test_comp, impute_nan: bool = True):
+        """ionicity
+
+        following supplement table 2 of Xu et al.(2024) **Not 2025**
+            * [Xu et al 2024](https://www.nature.com/articles/s41524-024-01386-4)
+        $I = 1-e^{1/4 \\sum_i{x_i |f_i - \\bar{f}|}}$,
+            where $f_i$ is electronegativity.
+        and bool criteria (True if I>1.7 else False)
+        """
+        prop=ElementProperty(data_source="magpie", features = ["Electronegativity",],
+                            stats=["mean", "maximum"], impute_nan=impute_nan)
+        #for unidentified reason, nan masked(from pandas) inputed with valid floating numbers
+
+        mean_ene, max_ene = prop.featurize(test_comp)
+        elems, fracs = zip(*test_comp.element_composition.items())
+        enes = [float(prop.data_source.get_elemental_property(e, "Electronegativity")) for e in elems]
+
+        if pd.isna(enes).any():
+            print(f"is_nan enes, fracs:{fracs}, {pd.isna(enes)}, \
+                elem:{elems}, types:{[type(ene) for ene in enes]}, \
+                    np.ma.is_masked:{[np.ma.is_masked(ene) for ene in enes]}")
+        def ionicity_calc(fracs, enes, criteria):
+            sum_sum=np.sum([frac*np.abs(ene-criteria) for ene, frac in zip(enes, fracs)])
+            return 1-np.exp(-(1/4)*sum_sum)
+
+        ion_mean = ionicity_calc(fracs, enes, mean_ene)
+        ion_max = ionicity_calc(fracs, enes, max_ene)
+
+        return ion_mean, ion_max, 1 if ion_mean>1.7 else 0
+                    
                 
         
 
@@ -327,7 +337,6 @@ class MultiSourceFeaturizer():
 
     def featurize_matminer(self,
                            featurized_df: pd.DataFrame,
-                           source_type: str,
                            config: dict,
                            comps_col: str = "comps_pymatgen",
                            impute_nan: bool = True,
@@ -342,12 +351,7 @@ class MultiSourceFeaturizer():
             * config: for single source, shoud have "src", "feature", "stat" keys.
         """
         # set data_source
-        if source_type=="matminer" or source_type=="matminer_expanded":
-            data_source=config_single_source["src"]
-        elif source_type=="matminer_secondary":
-            data_source=InhouseSecondary(impute_nan=impute_nan) # not to initialize this instance.
-        else:
-            raise ValueError(source_type)
+        data_source=config_single_source["src"]
         
         for config_single_source in config:
             featurizer = MyElementProperty(
@@ -357,6 +361,23 @@ class MultiSourceFeaturizer():
                 )
             featurized_df = featurizer.featurize_dataframe(featurized_df, col_id = comps_col, inplace=False)
         return featurized_df
+    
+    def featurize_matminer_2nd(self,
+                           featurized_df: pd.DataFrame,
+                           config: dict,
+                           comps_col: str = "comps_pymatgen",
+                           impute_nan: bool = True,
+                           ) -> pd.DataFrame:
+        data_source=InhouseSecondary(impute_nan=impute_nan) # not to initialize this instance.
+        for config_single_source in config:
+            featurizer = MyElementProperty2nd(
+                data_source = data_source,
+                features=config_single_source["feature"],
+                stats=config_single_source["stat"]
+                )
+            featurized_df = featurizer.featurize_dataframe(featurized_df, col_id = comps_col, inplace=False)
+        return featurized_df
+
     
     def featurize_all(self,
                       df: pd.DataFrame,
@@ -375,8 +396,10 @@ class MultiSourceFeaturizer():
         """
         featurized_df = df[["comps_pymatgen"]]
         for src in self.config["sources"]:
-            if src == "matminer" or src == "matminer_expanded" or src == "matminer_secondary":
-                featurized_df = self.featurize_matminer(featurized_df, source_type=src, config=self.config[src])
+            if src == "matminer" or src == "matminer_expanded":
+                featurized_df = self.featurize_matminer(featurized_df, config=self.config[src])
+            elif src == "matminer_secondary":
+                featurized_df = self.featurize_matminer_2nd(featurized_df, config=self.config[src])
             else:
                 raise NotImplementedError(src["src"])
         
