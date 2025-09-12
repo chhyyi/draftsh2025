@@ -19,8 +19,9 @@ dependencies = [
 [tool.poetry]
 packages = [{include = "draftsh", from = "src"}]
 include = [
-  { path = "mypackage/src/draftsh/data/miscs/vendor/mastml/LICENSE" },
-  { path = "mypackage/src/draftsh/data/miscs/vendor/mastml/README.md" },
+  { path = "mypackage/src/draftsh/data/vendor/mastml/LICENSE" },
+  { path = "mypackage/src/draftsh/data/vendor/mastml/README.md" },
+  { path = "mypackage/src/draftsh/data/vendor/matminer/LICENSE" }
 ]
 
 [build-system]
