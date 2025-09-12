@@ -19,16 +19,18 @@ from pathlib import Path
 import importlib.resources as resources
 from itertools import combinations
 from unittest.mock import patch
+import warnings
 
 import numpy as np
 import pandas as pd
 
+from pymatgen.core.periodic_table import Element
 from matminer.featurizers.composition import ElementProperty
 from matminer.featurizers.utils.stats import PropertyStats
-from matminer.utils.data import AbstractData, OxidationStatesMixin, MagpieData
+from matminer.utils.data import AbstractData
 
+from draftsh.data.vendor.matminer.data import MagpieData
 from draftsh.utils.utils import config_parser, ConfigSingleSource
-import warnings
 
 __all__ = ["Featurizer", "MultiSourceFeaturizer"]
 
@@ -71,13 +73,13 @@ def ionicity(test_comp, impute_nan: bool = True):
         where $f_i$ is electronegativity.
     and bool criteria (True if I>1.7 else False)
     """
-    prop=ElementProperty(data_source="deml", features = ["electronegativity",],
+    prop=ElementProperty(data_source="magpie", features = ["Electronegativity",],
                          stats=["mean", "maximum"], impute_nan=impute_nan)
     #for unidentified reason, nan masked(from pandas) inputed with valid floating numbers
 
     mean_ene, max_ene = prop.featurize(test_comp)
     elems, fracs = zip(*test_comp.element_composition.items())
-    enes = [float(prop.data_source.get_elemental_property(e, "electronegativity")) for e in elems]
+    enes = [float(prop.data_source.get_elemental_property(e, "Electronegativity")) for e in elems]
 
     if pd.isna(enes).any():
         print(f"is_nan enes, fracs:{fracs}, {pd.isna(enes)}, \
@@ -146,73 +148,31 @@ def parse_value_with_uncertainty(s: str):
 
 class MastMLMagpieData(MagpieData):
     """
-    all I need to change is the MagpieData.data_dir when its instance is initiallized.
+    Added arguments on `MagpieData` from `draftsh.data.vendor.matminer.data`}
+        * data_dir: save as MagpieData().data_dir
+        * skip_lines_table: I put some header about license on every vendored files so I should skip 3 lines
     But its super(self).__init__() is too long without defining any functions so hard to override
     """
     def __init__(self, impute_nan: bool):
         #dummy_magpie = MagpieData(impute_nan=impute_nan)
-        super().__init__(impute_nan=impute_nan)
-        self.dummy_data_dir = self.data_dir
-        with patch('matminer.utils.data.os.path.join', new = self.path_hack):
-            self.path_hack_worked = False
-            super().__init__(impute_nan=impute_nan)
-    
-    def path_hack(self, *args):
-        if not self.path_hack_worked:
-            assert Path(args[0])==Path(self.dummy_data_dir).parent.parent, (args, self.dummy_data_dir)
-            with resources.as_file(resources.files("draftsh.data.miscs.vendor.mastml.mastml.magpie")) as path:
-                self.path_hack_worked = True
-                return path
-        else:
-            return Path(args[0]).joinpath(*args[1:])
+        with resources.as_file(resources.files("draftsh").joinpath("data", "vendor", "mastml", "mastml", "magpie")) as f:
+            super().__init__(data_dir = f, skip_lines_table=3)
 
 class MyElementProperty(ElementProperty):
     """
     def featurize_uw to 'unweight'.
     """
-    def __init__(self, data_source: AbstractData, features: list[str], stats: list[str], impute_nan=False, unweight: bool = False):
+    def __init__(self, data_source: AbstractData | str, features: list[str], stats: list[str], impute_nan=False, unweight: bool = False):
         super().__init__(data_source, features, stats, impute_nan)
         self.unweight = unweight
         assert unweight == False, NotImplementedError
         self.pstats = CustomPropertyStats() #overrided
         if data_source == "mast-ml":
             self.data_source = MastMLMagpieData(impute_nan = self.impute_nan)
-
-    def featurize_uw(self, comp, unweighted: str):
-        """
-        if unweight, `fractions = None`
-        mostly copy of ElementryProperty.featurize
-        """
-        warnings.deprecated(f"featurize_uw is deprecated, let {CustomPropertyStats.__name__} handle weight")
-        if unweighted == "uwd":
-            all_attributes = []
-            elements, _ = zip(*comp.element_composition.items())
-
-            for attr in self.features:
-                if isinstance(self.data_source, str) and self.data_source=="bccfermi": \
-                    # for bccfermi (later for other features):
-                    elem_data = [self.bccfermi(e) for e in elements]
-                else:
-                    elem_data = [self.data_source.get_elemental_property(e, attr) for e in elements]
-
-                for stat in self.stats:
-                    all_attributes.append(self.pstats.calc_stat(elem_data, stat, weights=None))
-
-            return all_attributes
-        elif unweighted == "wd":
-            if isinstance(self.data_source, str) and self.data_source=="bccfermi": \
-                # for bccfermi (later for other features):
-                all_attributes = []
-                elements, weights = zip(*comp.element_composition.items())
-
-                elem_data = [self.bccfermi(e) for e in elements]
-                for stat in self.stats:
-                    all_attributes.append(self.pstats.calc_stat(elem_data, stat, weights=weights))
-                return all_attributes
-            else:
-                return super().featurize(comp)
+        elif data_source == "inhouse_secondary":
+            self.data_source = InhouseSecondary(impute_nan = self.impute_nan) # do not initiallize the instance
         else:
-            raise ValueError(unweighted)
+            assert isinstance(data_source, AbstractData)
     
     def bccfermi(self, e):
         """License: MIT License
@@ -236,12 +196,66 @@ class MyElementProperty(ElementProperty):
             LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
             OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
             SOFTWARE."""
+        raise AssertionError("do not call bccfermi")
         warnings.warn("accessing [mast-ml](https://github.com/uw-cmg/MAST-ML) files, with LICENSE: \n"+self.bccfermi.__doc__, UserWarning)
         with resources.as_file(resources.files("draftsh.data.miscs") /"BCCfermi.csv") as path:
             csv_path = path
         supercon_preprocessed = pd.read_csv(csv_path)
         supercon_dict = supercon_preprocessed.set_index("element").to_dict()['BCCfermi']
         return supercon_dict.get(e.symbol)
+
+class InhouseSecondary(AbstractData):
+    """
+    secondary features, rather complex to be a `stat`, using elemental features from MagpieData
+    """
+    def __init__(self, configs: dict, impute_nan: bool = False):
+        assert impute_nan==False
+    
+        self.all_elemental_props={}
+        self.available_props=[]
+        self.config_per_sources = [ConfigSingleSource(config_1source) for config_1source in configs]
+    
+        self.first_properties=["NsValence", "NpValence", "NdValence", "NfValence","Electronegativity"]
+        magpie_data = MagpieData(data_dir=None, impute_nan=impute_nan, features=self.first_properties)
+        self.xu_eights_init()
+        # using old functions for xu8, calc table
+
+    def xu_eights_init(self):
+        for config_1source in self.config_per_sources:
+            for srcc, feat, stat in config_1source.iter_config():
+                self.available_props.append(f"{srcc}_{feat}_{stat}")
+                for el in Element:
+                    self.all_elemental_props[feat][el.symbol]=getattr(self, feat)(el)
+
+                
+                
+        
+
+    def get_elemental_property(self, elem, property_name):
+        """Get a certain elemental property for a certain element.
+
+        Args:
+            elem - (Element) element to be assessed
+            property_name - (str) property to be retrieved
+        Returns:
+            float, property of that element
+        """
+        return self.all_elemental_props[property_name][elem.symbol]
+
+    def get_elemental_properties(self, elems, property_name):
+        """Get elemental properties for a list of elements
+
+        Args:
+            elems - ([Element]) list of elements
+            property_name - (str) property to be retrieved
+        Returns:
+            [float], properties of elements
+        """
+        return [self.get_elemental_property(e, property_name) for e in elems]
+
+    def get_elemental_property(self, elem, property_name):
+
+        
 
 class MultiSourceFeaturizer():
     """featurizer for in-house dataset and features
@@ -301,25 +315,21 @@ class MultiSourceFeaturizer():
             else:
                 raise ValueError(source)
         return num_matminer_features, matminer_col_names
-        
-
-        
-        if "xu_eight" in self.config["sources"]:
-            raise ValueError("xu_eight is merged with matminer_expanded")
-            self.xu_eight: bool = bool(self.config["xu_eight"])
-            self.feature_count["xu_eight"] = 8
-        # init configs for materials project api
-        if "materials_project" in self.config["sources"]:
-            raise NotImplementedError
-        print(f"featurizer initialized; {self.feature_count}")
-        return 
+        # if "xu_eight" in self.config["sources"]:
+        #     raise ValueError("xu_eight is merged with matminer_expanded")
+        #     self.xu_eight: bool = bool(self.config["xu_eight"])
+        #     self.feature_count["xu_eight"] = 8
+        # # init configs for materials project api
+        # if "materials_project" in self.config["sources"]:
+        #     raise NotImplementedError
+        # print(f"featurizer initialized; {self.feature_count}")
+        # return 
 
     def featurize_matminer(self,
-                           data: pd.DataFrame,
+                           featurized_df: pd.DataFrame,
+                           source_type: str,
                            config: dict,
                            comps_col: str = "comps_pymatgen",
-                           save_npz_dir: str | None = None,
-                           file_name: str | None = "matminer_features.npz",
                            impute_nan: bool = True,
                            ) -> pd.DataFrame:
         """ return results of `Featurizer.featurize_dataframe`
@@ -331,71 +341,27 @@ class MultiSourceFeaturizer():
                 * `comps_pymatgen` column: pymatgen....Composition object
             * config: for single source, shoud have "src", "feature", "stat" keys.
         """
-        if save_npz_dir is not None:
-            assert Path(save_npz_dir).is_dir(), NotImplementedError(save_npz_dir)
-            save_npz_pth = Path(save_npz_dir).joinpath(file_name)
-        for config_single_source in config:
-            featurizer = MyElementProperty(config_single_source["src"], config_single_source["feature"], config_single_source["stat"])
-            featurized_df = featurizer.featurize_dataframe(data, col_id = comps_col, inplace=False)
-        return featurized_df
-        config_1source = ConfigSingleSource(config)
-        for src, feautre, stat in config_1source.iter_config():
-            featurized_dset=np.zeros((len(data), self.feature_count["matminer_expanded"]), dtype=float)
-        for idx, row in data.iterrows():
-            assert pd.isna(row.get("Exceptions", None))
-            feature_row = []
-            for inp_desc in self.config["matminer"]:
-                for uw in inp_desc.get('unweighted', ["w",]):
-                    # process weighted
-                    assert uw=="w" or uw=="uw"
-                    (src, feat, stat)=(inp_desc["src"], inp_desc["feature"], inp_desc["stat"])
-                    elem_prop=MyElementProperty(data_source=src, features = feat, stats=stat, impute_nan=impute_nan)
-                    feature_row = np.append(feature_row, elem_prop.featurize_uw(comp=row["comps_pymatgen"], unweighted = uw)).flatten()
-            featurized_dset[idx] = np.array(feature_row, dtype=float)
-            if idx%100==0:
-                print(f"processed matminer features. {idx}/{len(data)}")
-        if save_npz_dir is not None:
-            np.savez(save_npz_pth, featurized_dset)
+        # set data_source
+        if source_type=="matminer" or source_type=="matminer_expanded":
+            data_source=config_single_source["src"]
+        elif source_type=="matminer_secondary":
+            data_source=InhouseSecondary(impute_nan=impute_nan) # not to initialize this instance.
+        else:
+            raise ValueError(source_type)
         
-        featurized_df = pd.DataFrame(data=featurized_dset, columns=self.col_names["matminer_expanded"])
+        for config_single_source in config:
+            featurizer = MyElementProperty(
+                data_source = data_source,
+                features=config_single_source["feature"],
+                stats=config_single_source["stat"]
+                )
+            featurized_df = featurizer.featurize_dataframe(featurized_df, col_id = comps_col, inplace=False)
         return featurized_df
     
-    def featurize_xu8(self, df: pd.DataFrame,
-                      save_npz_dir: str | None = None,
-                      file_name: str | None = "xu8_features.npz"
-                      ) -> pd.DataFrame:
-        if save_npz_dir is not None:
-            assert Path(save_npz_dir).is_dir(), NotImplementedError(save_npz_dir)
-            save_npz = Path(save_npz_dir).joinpath(file_name)
-
-        inhouse_cols=[]
-        inhouse_cols+=["elec_occu_s", "elec_occu_p","elec_occu_d","elec_occu_f"]
-        inhouse_cols.append("mixing_entropy_perR")
-        inhouse_cols+=["ionicity_ave", "ionicity_max", "ionicity_bool"]
-        lendata = len(df)
-        self.col_names["xu_eight"] = inhouse_cols
-
-
-        features_generated = np.zeros((len(df), len(inhouse_cols)), dtype=float)
-        for row_idx, row in df.iterrows():
-            gen4row = []
-            # valence_electron_occupation
-            gen4row += list(val_electron_occupation(row["comps_pymatgen"]))
-            #mixing entropy per R
-            gen4row.append(mixing_entropy_per_r(row["elements_fraction"]))
-            #ionicity
-            gen4row += ionicity(row["comps_pymatgen"])
-            features_generated[row_idx] = np.array(gen4row, dtype=float)
-
-            if row_idx%100==0:
-                print(f"processed xu8 features. {row_idx}/{lendata}")
-        if save_npz_dir is not None:
-            np.savez(save_npz, features_generated)
-        featurized_df = pd.DataFrame(data=features_generated, columns=inhouse_cols, dtype = float)
-
-        return featurized_df
-    
-    def featurize_all(self, df: pd.DataFrame, save_npz_dir: str | None = None, featurized_df: pd.DataFrame | None = None) -> pd.DataFrame:
+    def featurize_all(self,
+                      df: pd.DataFrame,
+                      featurized_df: pd.DataFrame | None = None,
+                      save_file: str | None = None,) -> pd.DataFrame:
         """featurize dataframe
 
         arguments:
@@ -407,19 +373,28 @@ class MultiSourceFeaturizer():
         return:
             * featurized_df: 
         """
-        if save_npz_dir is not None:
-            assert(Path(save_npz_dir).is_dir())
-
         featurized_df = df[["comps_pymatgen"]]
         for src in self.config["sources"]:
-            if src == "matminer" or src == "matminer_expanded":
-                featurized_df = self.featurize_matminer(featurized_df, config=self.config[src], save_npz_dir=save_npz_dir)
+            if src == "matminer" or src == "matminer_expanded" or src == "matminer_secondary":
+                featurized_df = self.featurize_matminer(featurized_df, source_type=src, config=self.config[src])
             else:
                 raise NotImplementedError(src["src"])
         
         #drop temporal column, "comps_pymatgen"
         featurized_df.drop(columns=["comps_pymatgen"], inplace=True)
         assert featurized_df.shape == (len(df), len(self.col_names))
+
+        # save featurized_df
+        if save_file is not None:
+            if isinstance(save_file, str):
+                save_file = Path(save_file)
+            assert not Path(save_file).is_dir(), NotImplementedError("save_file should be a file name")
+            if save_file.suffix == ".json":
+                featurized_df.to_json(save_file, orient="table", indent=4, index=None)
+            elif save_file.suffix == ".npz":
+                np.savez(save_file, featurized_df=featurized_df.to_numpy(), allow_pickle=False)
+            else:
+                NotImplementedError("save_file should be a `*.npz` or `*.json` file path")
         return featurized_df
     
     def merge_feature_dfs(self, src_df: pd.DataFrame, featurized_df: pd.DataFrame, reset_index=True):

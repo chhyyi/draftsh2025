@@ -174,7 +174,7 @@ def parse_value_with_uncertainty(s: str):
 def process_targets(df: pd.DataFrame, targets: list[str], non_sc_rule: str = "old", exception_row: str | None = "Exceptions") -> pd.DataFrame:
     """process targets, return a new pd.DataFrame"""
     #checkout targets
-    valid_targets = ["avg_Tc", "max_Tc", "std_Tc"]
+    valid_targets = ["avg_Tc", "max_Tc", "std_Tc", "min_Tc"]
     if all([t in valid_targets for t in targets]):
         pass
     else:
@@ -234,7 +234,7 @@ def process_targets(df: pd.DataFrame, targets: list[str], non_sc_rule: str = "ol
             target_array.append(row_target)
         elif len(tcs)==1:
             for target in targets:
-                if target == "avg_Tc" or "max_Tc":
+                if target == "avg_Tc" or "max_Tc" or "min_Tc":
                     row_target.append(tcs[0]["mean"]) # it is mean of a single Tc value!!
                 elif target=="std_Tc":
                     row_target.append(tcs[0]["std"])
@@ -250,6 +250,8 @@ def process_targets(df: pd.DataFrame, targets: list[str], non_sc_rule: str = "ol
                     averaging_std = np.std([tc["mean"] for tc in tcs])
                     propagated_std = np.sum([tc["std"] for tc in tcs])/len(tcs)
                     row_target.append(averaging_std if averaging_std>propagated_std else propagated_std)
+                elif target == "min_Tc":
+                    row_target.append(np.min([tc["mean"] for tc in tcs]))
             assert len(row_target)==len(targets)
             target_array.append(row_target)
     assert len(target_array)==len(df)
