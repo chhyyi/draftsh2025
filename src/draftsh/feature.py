@@ -128,46 +128,16 @@ class MyElementProperty(ElementProperty):
         self.pstats = CustomPropertyStats() #overrided
         if data_source == "mast-ml":
             self.data_source = MastMLMagpieData(impute_nan = self.impute_nan)
-        elif data_source == "inhouse_secondary":
-            self.data_source = InhouseSecondary(impute_nan = self.impute_nan) # do not initiallize the instance
         else:
             assert isinstance(data_source, AbstractData)
-    
-    def bccfermi(self, e):
-        """License: MIT License
-
-            Copyright (c) 2019 UW-Madison Computational Materials Group
-
-            Permission is hereby granted, free of charge, to any person obtaining a copy
-            of this software and associated documentation files (the "Software"), to deal
-            in the Software without restriction, including without limitation the rights
-            to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-            copies of the Software, and to permit persons to whom the Software is
-            furnished to do so, subject to the following conditions:
-
-            The above copyright notice and this permission notice shall be included in all
-            copies or substantial portions of the Software.
-
-            THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-            IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-            FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-            AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-            LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-            OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-            SOFTWARE."""
-        raise AssertionError("do not call bccfermi")
-        warnings.warn("accessing [mast-ml](https://github.com/uw-cmg/MAST-ML) files, with LICENSE: \n"+self.bccfermi.__doc__, UserWarning)
-        with resources.as_file(resources.files("draftsh.data.miscs") /"BCCfermi.csv") as path:
-            csv_path = path
-        supercon_preprocessed = pd.read_csv(csv_path)
-        supercon_dict = supercon_preprocessed.set_index("element").to_dict()['BCCfermi']
-        return supercon_dict.get(e.symbol)
 
 class InhouseSecondary(AbstractData):
     """
     secondary features, using elemental features from MagpieData
     
-    implemeneted 8 descriptors of table 2 of xu et al 2025.
+    to featurize 8 descriptors of table 2 of xu et al 2025,
+    self.get_elemental_property() return required data.
+    Will be consumed by MyElementProperty2nd().featurize()
     """
     def __init__(self, configs: dict, impute_nan: bool = False):
         assert impute_nan==False
@@ -179,10 +149,10 @@ class InhouseSecondary(AbstractData):
         self.first_properties=["NsValence", "NpValence", "NdValence", "NfValence", "NValence", "Electronegativity"]
         magpie_data = MagpieData(data_dir=None, impute_nan=impute_nan, features=self.first_properties)
         self.xu_eights_init(magpie_data)
-        self.
-        # using old functions for xu8, calc table
+        self.occu_ve_init(magpie_data)
 
-    def xu_eights_init(self):
+
+    def xu_eights_init(self, magpie_data: MagpieData):
         for config_1source in self.config_per_sources:
             for names in config_1source.iter_config():
                 self.available_props.append("_".join(names))
@@ -193,9 +163,16 @@ class InhouseSecondary(AbstractData):
     
     def occu_ve_init(self, magpie_data):
         for el in Element:
-            self.all_elemental_props[""]
-        return {"s": magpie_data,}
-        
+            orbs = ["NsValence", "NpValence", "NdValence", "NfValence", "NValence"]
+            out = {}
+            for orb in orbs:
+                orb_valence_electron=magpie_data.get_elemental_property(el.symbol, orb)
+                out[orbs]=orb_valence_electron
+            self.all_elemental_props["occu_ve"][el.symbol]=out
+
+    def ionicity_init(self, magpie_data):
+        for el in Element:
+            el.sym
 
     def val_electron_occupation(test_comp, impute_nan: bool = True):
         """
@@ -237,21 +214,7 @@ class InhouseSecondary(AbstractData):
         ion_max = ionicity_calc(fracs, enes, max_ene)
 
         return ion_mean, ion_max, 1 if ion_mean>1.7 else 0
-                    
-                
         
-
-    def get_elemental_property(self, elem, property_name):
-        """Get a certain elemental property for a certain element.
-
-        Args:
-            elem - (Element) element to be assessed
-            property_name - (str) property to be retrieved
-        Returns:
-            float, property of that element
-        """
-        return self.all_elemental_props[property_name][elem.symbol]
-
     def get_elemental_properties(self, elems, property_name):
         """Get elemental properties for a list of elements
 
@@ -262,10 +225,6 @@ class InhouseSecondary(AbstractData):
             [float], properties of elements
         """
         return [self.get_elemental_property(e, property_name) for e in elems]
-
-    def get_elemental_property(self, elem, property_name):
-
-        
 
 class MultiSourceFeaturizer():
     """featurizer for in-house dataset and features
@@ -351,15 +310,11 @@ class MultiSourceFeaturizer():
             * config: for single source, shoud have "src", "feature", "stat" keys.
         """
         # set data_source
-        data_source=config_single_source["src"]
+        data_source=config["src"]
         
         for config_single_source in config:
-            featurizer = MyElementProperty(
-                data_source = data_source,
-                features=config_single_source["feature"],
-                stats=config_single_source["stat"]
-                )
-            featurized_df = featurizer.featurize_dataframe(featurized_df, col_id = comps_col, inplace=False)
+            featurizer = MyElementProperty(data_source = data_source, features=config_single_source["feature"], stats=config_single_source["stat"])
+            featurizer.featurize_dataframe(featurized_df, col_id = comps_col, inplace=True)
         return featurized_df
     
     def featurize_matminer_2nd(self,
@@ -368,7 +323,7 @@ class MultiSourceFeaturizer():
                            comps_col: str = "comps_pymatgen",
                            impute_nan: bool = True,
                            ) -> pd.DataFrame:
-        data_source=InhouseSecondary(impute_nan=impute_nan) # not to initialize this instance.
+        data_source=InhouseSecondary(configs = config, impute_nan=impute_nan) # not to initialize this instance.
         for config_single_source in config:
             featurizer = MyElementProperty2nd(
                 data_source = data_source,
