@@ -1,0 +1,5 @@
+{
+    "targets": ["max_Tc", "min_Tc", "avg_Tc"],
+    "sheetname": "DataTable",
+    "exception_col": null
+}

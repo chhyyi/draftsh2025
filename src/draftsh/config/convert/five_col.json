@@ -1,0 +1,22 @@
+{
+    "conversion":{
+        "from": "inhouse-merged",
+        "to": "five_columns"
+    },
+    "exceptions":{
+        "num_elements":{
+            "min":4,
+            "max":30
+        },
+        "tc":{
+            "non_sc_observed": true,
+            "max": 350.0,
+            "min": 0.0
+        }
+    },
+    "dataset_config": "default_forward.json",
+    "keep_cols": [
+        "elements",
+        "elements_fraction"
+    ]
+}

@@ -176,4 +176,5 @@ cython_debug/
 # private data
 src/draftsh/data/inhouse_dataset_merged_0810.xlsx
 src/draftsh/data/*.xlsx
+src/draftsh/data/*.csv
 temp_devs/

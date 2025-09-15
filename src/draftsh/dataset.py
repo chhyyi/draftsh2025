@@ -4,9 +4,11 @@ Todo
     * refactor DLDataset
 """
 
+import json
 from pathlib import Path
 from abc import ABC, abstractmethod
 import importlib.resources as resources
+import string
 
 import pandas as pd
 import numpy as np
@@ -15,9 +17,10 @@ from pymatgen.core.periodic_table import Element
 from sklearn.model_selection import train_test_split
 from matminer.featurizers.composition import ElementProperty
 
-from draftsh.parsers import CellParser, FracParser, ElemParser, process_targets
+from draftsh.parsers import CellParser, FracParser, ElemParser
 from draftsh.utils.utils import config_parser
 from draftsh.feature import MultiSourceFeaturizer
+from draftsh.utils.conversion_utils import process_targets, almost_equals_pymatgen_atomic_fraction
 
 
 #from matminer.featurizers.composition import composite
@@ -65,6 +68,43 @@ class BaseDataset(ABC):
             return None
         else:
             return self.dataframe["comps_pymatgen"]
+        
+    def pymatgen_duplicates(self, save_dir=None, rtol=0.1, comps_pymatgen_col='comps_pymatgen'):
+        self.duplicated_comps_group={}
+        self.duplicated_comps=set()
+        for idx, row in self.dataframe.iterrows():
+            if idx not in self.duplicated_comps:
+                duplicated_row={}
+                for iidx, rrow in self.dataframe[idx:].iterrows():
+                    if almost_equals_pymatgen_atomic_fraction(rrow[comps_pymatgen_col], row[comps_pymatgen_col], rtol=rtol):
+                        duplicated_row[iidx]=rrow[comps_pymatgen_col]
+                if len(duplicated_row)>=2: #including self, so it should be larger than 1.
+                    print(f"idx, duplicated_idx: {idx}, {duplicated_row}")
+                    self.duplicated_comps.update(list(duplicated_row.keys()))
+                    self.duplicated_comps_group[idx]={
+                        k: str(v) for k, v in duplicated_row.items()
+                        }
+        if save_dir is not None:
+            with open("duplicates_group.json", 'w', encoding="utf-8") as f:
+                json.dump(self.duplicated_comps_group, f, indent=4, ensure_ascii=False)
+    
+    def validate_by_composition(self):
+        allowed = set(string.ascii_letters + string.digits + '.')
+        for idx, row in self.dataframe.iterrows():
+            if set(row["composition"]) <= allowed:
+                comp=Composition(row["composition"])
+            else:
+                comp=None
+            if comp is not None:
+                    if idx in list(range(27, 40)):
+                        pass
+                    else:
+                        assert almost_equals_pymatgen_atomic_fraction(row["comps_pymatgen"], comp, rtol=0.001), f"idx: {idx}, comp:{comp}, comps_pymatgen:{row['comps_pymatgen']}"
+
+                    
+    def merge_duplicated_comps(self, rule: str):
+        pass
+        
 
     def assign_dtypes(self):
         for col in self.dataframe.columns:
@@ -98,7 +138,7 @@ class XlsxDataset(BaseDataset):
         if xls_path.is_absolute():
             pass
         else:
-            with resources.as_file(resources.files("draftsh.data") / xls_path) as pth:
+            with resources.as_file(resources.files("draftsh.data").joinpath(xls_path)) as pth:
                 xls_path = pth
             assert xls_path.is_file(),FileNotFoundError
 
@@ -114,10 +154,10 @@ class XlsxDataset(BaseDataset):
         self.dataframe: pd.DataFrame = df.reset_index(drop=True)
 
     def load_data(self) -> pd.DataFrame:
-        df = pd.read_excel(self.dset_path, sheet_name=self.sheet, nrows=self.maxlen)
+        df = pd.read_excel(self.dset_path,
+                           sheet_name=self.sheet,
+                           nrows=self.maxlen)
         return df.drop(columns=self.drop_cols)
-
-    
 
 class Dataset(XlsxDataset):
     """
@@ -127,16 +167,30 @@ class Dataset(XlsxDataset):
             - SC-HEA Dataset
                 - LiteratureReview/datatable/SC_HEA_dataset_CY_JH_temp.xlsx
     - attributes
-        - ....
+        - exception_col: simple filter by specific column values
     """
-    def __init__(self, xls_path, config: str | dict | Path = "default"):
+    def __init__(self, 
+                 xls_path, 
+                 config: str | dict | Path = "default",
+                 drop_cols: list[str] | None = None,
+                 exception_col: str | list[str] | None = "Exceptions"):
         self.config = config_parser(config, mode="dataset")
-        super().__init__(xls_path, notebook = self.config["sheetname"], drop_cols = self.config["drop_cols"])
+        super().__init__(
+            xls_path, 
+            notebook = self.config["sheetname"], 
+            drop_cols = self.config.get("drop_cols", drop_cols), 
+            exception_col=self.config.get("exception_col", exception_col))
         self.parse_elements_col()
         self.parse_frac_col()
+        self.validate_elem_frac_length()
         self.elemental_set: set = self.elemental_stats()
         self.pymatgen_comps()
 
+    def validate_elem_frac_length(self):
+        assert self.dataframe.apply(
+            lambda x: (len(x["elements"])==len(x["elements_fraction"])), axis=1).all(),\
+            self.dataframe.loc[self.dataframe.apply(
+            lambda x: len(x["elements"])!=len(x["elements_fraction"]), axis=1)]
 
     def parse_elements_col(self, colname: str="elements"):
         """parse string of xlsx cell with elements in list form"""

@@ -30,7 +30,7 @@ from matminer.featurizers.utils.stats import PropertyStats
 from matminer.utils.data import AbstractData
 
 from draftsh.data.vendor.matminer.data import MagpieData
-from draftsh.utils.utils import config_parser, ConfigSingleSource
+from draftsh.utils.utils import config_parser, ConfigSingleSource, merge_dfs
 
 __all__ = ["Featurizer", "MultiSourceFeaturizer"]
 
@@ -149,8 +149,8 @@ class InhouseSecondary(AbstractData):
         self.first_properties=["NsValence", "NpValence", "NdValence", "NfValence", "NValence", "Electronegativity"]
         magpie_data = MagpieData(data_dir=None, impute_nan=impute_nan, features=self.first_properties)
         self.xu_eights_init(magpie_data)
-        self.occu_ve_init(magpie_data)
-
+        # self.
+        # using old functions for xu8, calc table
 
     def xu_eights_init(self, magpie_data: MagpieData):
         for config_1source in self.config_per_sources:
@@ -373,16 +373,6 @@ class MultiSourceFeaturizer():
                 np.savez(save_file, featurized_df=featurized_df.to_numpy(), allow_pickle=False)
             else:
                 NotImplementedError("save_file should be a `*.npz` or `*.json` file path")
-        return featurized_df
-    
-    def merge_feature_dfs(self, src_df: pd.DataFrame, featurized_df: pd.DataFrame, reset_index=True):
-        assert reset_index, NotImplementedError(reset_index)
-
-        shape_df = np.shape(featurized_df)
-        shape_src_df = np.shape(src_df)
-        featurized_df = featurized_df.reset_index(drop=True).join(src_df.reset_index(drop=True))
-
-        assert featurized_df.shape[1] == shape_df[1]+shape_src_df[1]
         return featurized_df
         
 
