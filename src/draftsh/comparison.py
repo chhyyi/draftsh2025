@@ -11,13 +11,14 @@ References
 from pathlib import Path
 import importlib.resources as resources
 from urllib.parse import urlparse
+from typing import Optional
 
 import pandas as pd
 from pymatgen.core.composition import Composition
 
-from draftsh.dataset import XlsxDataset, BaseDataset
+from draftsh.dataset import D2TableDataset, BaseDataset
 
-class XuTestHEA(XlsxDataset):
+class XuTestHEA(D2TableDataset):
     """reproduce test HEA set of Xu et al. 2025.
     
     see supple. Table 1
@@ -45,7 +46,7 @@ class StanevSuperCon(BaseDataset):
         * see `src\draftsh\data\miscs\preprocess_supercon.py`
         * note that Tc_upper_bound is hard coded, because it is close to the 5213 entries of xu et al
     """
-    def __init__(self, drop_cols = None, exception_col = None, maxlen: int | None = None):
+    def __init__(self, drop_cols = None, exception_col = None, maxlen: Optional[int] = None):
         super().__init__(data_path=None, drop_cols=drop_cols, exception_col=exception_col)
         self.maxlen = maxlen
         self.load_data()

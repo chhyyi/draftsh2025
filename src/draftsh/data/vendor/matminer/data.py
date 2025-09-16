@@ -50,10 +50,10 @@ class MagpieData(AbstractData, OxidationStatesMixin):
     """
 
     def __init__(self,
-                 data_dir: Path | str | None = None,
+                 data_dir: Path | str = None,
                  encoding: str = "utf-8",
-                 _props: list[str] | None = None,
-                 skip_lines_table: int | None = None,
+                 _props: list[str] = None,
+                 skip_lines_table: int = None,
                  features: list[str] | str = "all",
                  impute_nan: bool=False):
         self.all_elemental_props = {}
@@ -91,7 +91,7 @@ class MagpieData(AbstractData, OxidationStatesMixin):
         self.parse_store_elemental_props(skip_lines_table)
 
 
-    def parse_store_elemental_props(self, skiplines: int | None = None):
+    def parse_store_elemental_props(self, skiplines: int = None):
         """parse and store elemental properties
 
         mm..

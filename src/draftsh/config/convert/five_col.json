@@ -10,13 +10,19 @@
         },
         "tc":{
             "non_sc_observed": true,
-            "max": 350.0,
+            "max": 50.0,
             "min": 0.0
         }
     },
     "dataset_config": "default_forward.json",
     "keep_cols": [
         "elements",
-        "elements_fraction"
-    ]
+        "elements_fraction",
+        "duplicated_group",
+        "full citation"
+    ],
+    "duplicates_rule":{
+        "tc": "all_tcs",
+        "criteria": "single_ref"
+    }
 }

@@ -5,10 +5,12 @@ Todo
 """
 
 import json
+import warnings
 from pathlib import Path
 from abc import ABC, abstractmethod
 import importlib.resources as resources
 import string
+from typing import Optional, Literal
 
 import pandas as pd
 import numpy as np
@@ -20,7 +22,7 @@ from matminer.featurizers.composition import ElementProperty
 from draftsh.parsers import CellParser, FracParser, ElemParser
 from draftsh.utils.utils import config_parser
 from draftsh.feature import MultiSourceFeaturizer
-from draftsh.utils.conversion_utils import process_targets, almost_equals_pymatgen_atomic_fraction
+from draftsh.utils.conversion_utils import process_targets, almost_equals_pymatgen_atomic_fraction, norm_fracs
 
 
 #from matminer.featurizers.composition import composite
@@ -28,18 +30,22 @@ from draftsh.utils.conversion_utils import process_targets, almost_equals_pymatg
 class BaseDataset(ABC):
     """Base Class for Dataset classes, 
     
+    argument:
         * drop_cols: drop these columns
+        * exception_col: column to simply except some rows.
+             e.g.) boolean column
     """
     def __init__(
-            self, data_path: Path | str | None,
-            drop_cols: list[str] | None = None,
-            exception_col: str | list[str] | None = "Exceptions"):
+            self, data_path: Optional[Path | str],
+            drop_cols: Optional[list[str]] = None,
+            exception_col: Optional[str | list[str]] = None):
         if drop_cols is None:
             self.drop_cols = []
         else:
             self.drop_cols = drop_cols
         self.dset_path: Path = data_path
         self.dataframe: pd.DataFrame = pd.DataFrame()
+        self.exception_col = exception_col
 
     @abstractmethod
     def load_data(self) -> pd.DataFrame:
@@ -60,7 +66,7 @@ class BaseDataset(ABC):
         assert elems.issubset(set([el.symbol for el in Element]))
         return elems
     
-    def pymatgen_comps(self, inplace = True) -> pd.Series | None:
+    def pymatgen_comps(self, inplace = True) -> Optional[pd.Series]:
         comps_pymatgen = self.dataframe.apply(lambda row: Composition(zip(row["elements"], row["elements_fraction"])), axis=1)
         assert len(comps_pymatgen) == len(self.dataframe)
         if inplace:
@@ -91,19 +97,48 @@ class BaseDataset(ABC):
     def validate_by_composition(self):
         allowed = set(string.ascii_letters + string.digits + '.')
         for idx, row in self.dataframe.iterrows():
-            if set(row["composition"]) <= allowed:
-                comp=Composition(row["composition"])
-            else:
+            comp=None
+            try:
+                if set(row["composition"]) <= allowed:
+                    comp=Composition(row["composition"])
+            except:
                 comp=None
             if comp is not None:
-                    if idx in list(range(27, 40)):
+                if idx in list(range(27, 40)): # Oxygen not included on composition
+                    pass
+                elif idx in list(range(88, 93)): #nominal - actual
+                    pass
+                elif idx in list(range(270, 276)): #x variable
+                    pass
+                else:
+                    if almost_equals_pymatgen_atomic_fraction(row["comps_pymatgen"], comp, rtol=0.001):
                         pass
                     else:
-                        assert almost_equals_pymatgen_atomic_fraction(row["comps_pymatgen"], comp, rtol=0.001), f"idx: {idx}, comp:{comp}, comps_pymatgen:{row['comps_pymatgen']}"
+                        assert row["comps_pymatgen"].elements==comp.elements
+                        warnings.warn(f"idx: {idx}, comp:{comp}, comps_pymatgen:{row['comps_pymatgen']}")
+                        print(f"while norm_fracs(comp):{norm_fracs(comp)}, norm_fracs_comps_pymatgen:{norm_fracs(row['comps_pymatgen'])}")
 
                     
-    def merge_duplicated_comps(self, rule: str):
-        pass
+    def add_duplicated_comps_column(self, criteria_rule: Literal['single_ref'], inplace=True):
+        assert criteria_rule in ['single_ref'], NotImplementedError(criteria_rule)
+        duplicate_groups=[] # will be a new column, group name = first instance idx(in self.dataset.duplicated_comps_group.keys)
+        for idx0, row0 in self.dataframe.iterrows():
+            group_row=np.nan
+            if idx0 in self.duplicated_comps_group.keys():
+                for idx1 in self.duplicated_comps_group[idx0].keys():            
+                    cite0=row0["full citation"]
+                    cite1=self.dataframe.loc[idx1, "full citation"]
+                    group_row = idx0 if cite0==cite1 else np.nan
+            duplicate_groups.append(group_row)
+        self.dataframe['duplicated_group']=duplicate_groups
+        return duplicate_groups
+
+                            
+
+                        
+                
+        
+
         
 
     def assign_dtypes(self):
@@ -111,10 +146,10 @@ class BaseDataset(ABC):
             if not self.dataframe.col.dtype in (list, dict, float, str):
                 self.dataframe[col] = self.dataframe[col].astype(str)
 
-class XlsxDataset(BaseDataset):
+class D2TableDataset(BaseDataset):
     """Base Class for Dataset classes, load xlsx file
     
-    load MS Excel(xlsx) file, generate features and an export array for ML.
+    load csv or MS Excel(xlsx) file, generate features and an export array for ML.
 
     Parameters:
         * xls_path: path to the the xlsx file
@@ -126,9 +161,9 @@ class XlsxDataset(BaseDataset):
     """
     def __init__(
             self, xls_path: Path | str,
-            notebook: str,
-            drop_cols: list[str] | None = None,
-            exception_col: str | list[str] | None = "Exceptions"):
+            notebook: str = None,
+            drop_cols: Optional[list[str]] = None,
+            exception_col: Optional[str | list[str]] = "Exceptions"):
         if drop_cols is None:
             self.drop_cols = []
         else:
@@ -144,7 +179,7 @@ class XlsxDataset(BaseDataset):
 
         super().__init__(xls_path, drop_cols = drop_cols)
         self.sheet = notebook
-        self.maxlen: int | None = None
+        self.maxlen: Optional[int] = None
 
         df = self.load_data()
         if exception_col is not None:
@@ -154,12 +189,18 @@ class XlsxDataset(BaseDataset):
         self.dataframe: pd.DataFrame = df.reset_index(drop=True)
 
     def load_data(self) -> pd.DataFrame:
-        df = pd.read_excel(self.dset_path,
-                           sheet_name=self.sheet,
-                           nrows=self.maxlen)
+        if self.dset_path.suffix==".xlsx" or self.dset_path.stem==".xls":
+            df = pd.read_excel(self.dset_path,
+                            sheet_name=self.sheet,
+                            nrows=self.maxlen)
+        elif self.dset_path.suffix==".csv":
+            df = pd.read_csv(self.dset_path,
+                            nrows=self.maxlen)
+        else:
+            raise TypeError("read only xlsx, xls, csv files(should have suffix).")
         return df.drop(columns=self.drop_cols)
 
-class Dataset(XlsxDataset):
+class Dataset(D2TableDataset):
     """
     - methods
         - __init__
@@ -172,12 +213,12 @@ class Dataset(XlsxDataset):
     def __init__(self, 
                  xls_path, 
                  config: str | dict | Path = "default",
-                 drop_cols: list[str] | None = None,
-                 exception_col: str | list[str] | None = "Exceptions"):
+                 drop_cols: Optional[list[str]] = None,
+                 exception_col: Optional[str | list[str]] = "Exceptions"):
         self.config = config_parser(config, mode="dataset")
         super().__init__(
             xls_path, 
-            notebook = self.config["sheetname"], 
+            notebook = self.config.get("sheetname"), 
             drop_cols = self.config.get("drop_cols", drop_cols), 
             exception_col=self.config.get("exception_col", exception_col))
         self.parse_elements_col()
@@ -240,7 +281,7 @@ class DLDataset(BaseDataset):
     """
     mostly copy of XlsxDataset and Dataset. should be refactored
     """
-    def __init__(self, data_path: Path | str, drop_cols: list[str] | None = None):
+    def __init__(self, data_path: Path | str, drop_cols: Optional[list[str]] = None):
         if isinstance(data_path, str):
             data_path = Path(data_path)
         assert data_path.is_absolute(), f"data_path: {data_path} should be absolute"

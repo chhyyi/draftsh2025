@@ -336,13 +336,13 @@ class MultiSourceFeaturizer():
     
     def featurize_all(self,
                       df: pd.DataFrame,
-                      featurized_df: pd.DataFrame | None = None,
-                      save_file: str | None = None,) -> pd.DataFrame:
+                      featurized_df: pd.DataFrame = None,
+                      save_file: str = None,) -> pd.DataFrame:
         """featurize dataframe
 
         arguments:
             * df: dataframe with "comps_pymatge" column of `pymatgen`'s `Composition` class.
-            * save_npz: str | None = None
+            * save_npz: str = None
                 if not none, save processed features of each featurize functions respectedly not a whole one. 
                 should be directory path only
 
@@ -379,9 +379,9 @@ class MultiSourceFeaturizer():
 class CustomPropertyStats(PropertyStats):
     def __init__(self):
         self.all_aps: tuple[list, None] | tuple[list, list] = None
-        self.init_ap_inputs: tuple[list,list] | tuple[list, None] | None = None
+        self.init_ap_inputs: tuple[list,list] | tuple[list, None] = None
 
-    def call_ap(self, data_lst: list[float], weights: list[float] | None, weights_rule = "temp"):
+    def call_ap(self, data_lst: list[float], weights: list[float], weights_rule = "temp"):
         if (data_lst, weights) == self.init_ap_inputs:
             pass
         else:
@@ -415,7 +415,7 @@ class CustomPropertyStats(PropertyStats):
         return getattr(self, statistics[0])(data_lst, weights, *statistics[1:])
         
     @staticmethod
-    def iter_pair(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> list[tuple[float, float, float]] | list[tuple[float, float]]:
+    def iter_pair(data_lst: list[float], weights: list[float], weights_rule = "temp") -> list[tuple[float, float, float]] | list[tuple[float, float]]:
         """
         iter all data pairs in data_list: list[float]
 
@@ -442,7 +442,7 @@ class CustomPropertyStats(PropertyStats):
         return pairs
 
     @staticmethod
-    def init_all_aps(data_lst: list[float], weights: list[float] | None, weights_rule = "temp") -> tuple[list[float], list[float] | None]:
+    def init_all_aps(data_lst: list[float], weights: list[float], weights_rule = "temp") -> tuple[list[float], list[float]]:
         """
         return all absolute percentages as a list
         """

@@ -95,11 +95,11 @@ class FracParser(CellParser):
     def __init__(self, policy="frac"):
         super().__init__(policy)
 
-    def parse(self, fracs, multiphase_rule: str | None = "nominal", as_float: bool = True):
+    def parse(self, fracs, multiphase_rule: str = "nominal", as_float: bool = True):
         """ parse elemental_fractions as list of numbers
         
         args:
-            * multiphase_rule:
+            * multi_fracs_rule:
                 if "nominal", use fracs["nominal"].
         """
         fracs = ast.literal_eval(fracs)

@@ -78,7 +78,7 @@ def compare_as_dataframe(
         dataset: Dataset, featurizer: MultiSourceFeaturizer,
         max_high_errors: tuple[int, int, int, int] = (10, 1, 10, 1),
         max_high_error_features_to_return: tuple[int, int, int, int] = (2, 1, 2, 1),
-        assert_every_features_in_common: str | None = None
+        assert_every_features_in_common: str = None
         ) -> list[str]:
     """compare as dataframe
 
@@ -96,7 +96,7 @@ def compare_as_dataframe(
         * assert_every_features_in_common: see below for details.
             * analyze features made error, run with old snapshots!
     
-    assert_every_features_in_common: str | None 
+    assert_every_features_in_common: Optional[str]
         * "mae_20250904"
             * What it does: 
                 * `assert all("mae" in col_names[i] for i \
