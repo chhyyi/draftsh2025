@@ -122,10 +122,9 @@ class Converter():
             return_num_tcs=True,
             exception_row=None,
             non_sc_rule='nan')
-        out_df = merge_dfs(target_df, dataset.dataframe[config["keep_cols"]])
+        out_df = merge_dfs(target_df, dataset.dataframe[config["keep_cols"]], )
         out_df = self.merge_duplicates(config, out_df, targets)
         out_df = self.exclude_exceptions(config, out_df)
-        
         return out_df
     
     def merge_duplicates(self, config, out_df, targets):
