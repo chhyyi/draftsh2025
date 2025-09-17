@@ -1,0 +1,31 @@
+{
+    "exceptions":{
+        "num_elements":{
+            "min":4,
+            "max":30,
+            "ignore_elements":["H", "He", "C", "N", "O", "F", "Ne"]
+        },
+        "tc":{
+            "non_sc_observed": true,
+            "max": 50.0,
+            "min": 0.0
+        }
+    },
+    "keep_cols_from_dataset": [
+        "elements",
+        "elements_fraction",
+        "full citation"
+    ],
+    "drop_cols_after_merge_duplicates":[
+        "full citation",
+        "num_valid_tc"
+    ],
+    "duplicates_rule":{
+        "tc": "max_Tc",
+        "criteria": "single_ref"
+    },
+    "dataset_config": "default_forward.json",
+    "save_compositional5_dir": "temp_devs/compositional5_max_tc.csv",
+    "save_log_dir": "temp_devs/compositional5_max_tc.log.json",
+    "keep_merged_dataset_index": "idx_0917"
+}

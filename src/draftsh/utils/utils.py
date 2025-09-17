@@ -26,7 +26,7 @@ def config_parser(config: str | dict | Path, mode: Literal["dataset", "feature",
         if config.is_absolute():
             xls_path = config
         else:
-            with resources.as_file(resources.files(f"draftsh.config").joinpath(mode, config)) as path:
+            with resources.as_file(resources.files(f"draftsh.config").joinpath(mode).joinpath(config.name)) as path:
                 xls_path = path
                 assert xls_path.is_file(), FileNotFoundError(xls_path)
         fp = open(xls_path, "r", encoding = "utf-8")
@@ -38,7 +38,7 @@ def config_parser(config: str | dict | Path, mode: Literal["dataset", "feature",
     return config
 
     
-def merge_dfs(src_df: pd.DataFrame, featurized_df: pd.DataFrame, out_cols:list[str], reset_index=True):
+def merge_dfs(src_df: pd.DataFrame, featurized_df: pd.DataFrame, reset_index=True):
     """
     merge dfs with same length"""
     assert reset_index, NotImplementedError(reset_index)
@@ -48,7 +48,7 @@ def merge_dfs(src_df: pd.DataFrame, featurized_df: pd.DataFrame, out_cols:list[s
     featurized_df = featurized_df.reset_index(drop=True).join(src_df.reset_index(drop=True))
 
     assert featurized_df.shape[1] == shape_df[1]+shape_src_df[1]
-    return featurized_df.loc[:,out_cols]
+    return featurized_df
 
 class ConfigSingleSource():
     """For a single run of featurize_dataframe() of `draftsh.feature.MyElementalProperty()` class.

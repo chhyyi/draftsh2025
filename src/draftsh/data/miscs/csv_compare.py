@@ -4,10 +4,12 @@ from pathlib import Path
 import html
 import re
 
+
 # --- EDIT THESE PATHS / KEY ---
-OLD = r"C:\Users\chyi\draftsh2025\temp_devs\inhouse_dataset_merged_0810.csv"
-NEW = r"C:\Users\chyi\draftsh2025\temp_devs\merged_dataset_forward.csv"
-KEY_COL = "idx_0810"   # your unique key column
+OLD = r"C:\Users\hms_l\draftsh2025\temp_devs\compositional5_max_tc.csv"
+NEW = r"C:\Users\hms_l\draftsh2025\temp_devs\compositional5_all_tc.csv"
+KEY_COL = "idx_0917"   # your unique key column
+OUT_PATH = "temp_devs\\max_tc_to_all_tc.html"
 
 # ---------- load & normalize ----------
 old: pd.DataFrame = pd.read_csv(OLD, dtype=str, keep_default_na=False).applymap(str.strip)
@@ -20,7 +22,7 @@ if KEY_COL not in new.columns:
     new[KEY_COL] = range(len(new))
 
 # wish-list columns to keep near the front when available
-keep_wishlist = ["index_0810", "idx_0810", "elements", "elements_fraction"]
+keep_wishlist = ["idx_0917", "elements", "elements_fraction"]
 keep_cols = [KEY_COL] + [c for c in keep_wishlist if c in old.columns and c in new.columns]
 _seen = set(); keep_cols = [c for c in keep_cols if not (c in _seen or _seen.add(c))]
 
@@ -286,5 +288,5 @@ else:
     parts.append("<p>No changed rows.</p><br/>")
 
 html_out = "".join(parts)
-Path("csv_table_diff.html").write_text(html_out, encoding="utf-8")
-print("Wrote csv_table_diff.html")
+Path(OUT_PATH).write_text(html_out, encoding="utf-8")
+print(f"Wrote {OUT_PATH}")

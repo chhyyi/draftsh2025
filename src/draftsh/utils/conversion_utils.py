@@ -3,6 +3,8 @@ utility functions to convert datatables.
 
 Todo: refactor process_target(too long)
 """
+from typing import Optional
+
 import pandas as pd
 import numpy as np
 from draftsh.parsers import parse_value_with_uncertainty
@@ -11,7 +13,7 @@ from pymatgen.core import Composition
 import ast
 import warnings
 
-def norm_fracs(comp: Composition | str, elems: list=None, norm:bool=True):
+def norm_fracs(comp: Composition | str, elems: Optional[list]=None, norm:bool=True):
     if isinstance(comp, str):
         comp = Composition(comp)
     fracs=[]
@@ -55,8 +57,8 @@ def process_targets(
         df: pd.DataFrame, 
         targets: list[str],
         non_sc_rule: str = "old", # "old" or "nan"
-        exception_row: str = "Exceptions",
-        valid_targets: tuple[str] = ("avg_Tc", "max_Tc", "std_Tc", "min_Tc"),
+        exception_row: Optional[str] = "Exceptions",
+        valid_targets: tuple[str, ...] = ("avg_Tc", "max_Tc", "std_Tc", "min_Tc"),
         return_num_tcs: bool=False,
         tc_cols=("Tc(K).resistivity.mid", "Tc(K).magnetization.mid", "Tc(K).resistivity.None", "Tc(K).magnetization.onset", "Tc(K).magnetization.None", "Tc(K).resistivity.zero", "Tc(K).specific_heat.mid", "Tc(K).other.None", "Tc(K).resistivity.onset", "Tc(K).specific_heat.onset", "Tc(K).specific_heat.None", "Tc(K).magnetization.zero", "Tc(K).other.onset", "Tc(K).other.mid", "Tc(K).specific_heat.zero")
         ) -> pd.DataFrame:

@@ -75,7 +75,7 @@ class BaseDataset(ABC):
         else:
             return self.dataframe["comps_pymatgen"]
         
-    def pymatgen_duplicates(self, save_dir=None, rtol=0.1, comps_pymatgen_col='comps_pymatgen'):
+    def pymatgen_duplicates(self, save_dir=None, rtol=0.1, comps_pymatgen_col='comps_pymatgen', return_dict:bool=True):
         self.duplicated_comps_group={}
         self.duplicated_comps=set()
         for idx, row in self.dataframe.iterrows():
@@ -91,7 +91,7 @@ class BaseDataset(ABC):
                         k: str(v) for k, v in duplicated_row.items()
                         }
         if save_dir is not None:
-            with open("duplicates_group.json", 'w', encoding="utf-8") as f:
+            with open(save_dir, 'w', encoding="utf-8") as f:
                 json.dump(self.duplicated_comps_group, f, indent=4, ensure_ascii=False)
     
     def validate_by_composition(self):

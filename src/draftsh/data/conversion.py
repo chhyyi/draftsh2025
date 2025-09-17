@@ -15,6 +15,7 @@ Todo:
 """
 import ast
 import argparse
+import json
 from abc import abstractmethod
 
 import pandas as pd
@@ -33,14 +34,14 @@ class TcMerger():
         
         if rule=="all_tcs":
             self.merge_method=self.merge_all_tcs
-        elif rule=="max_tc":
+        elif rule=="max_Tc":
             self.merge_method=self.merge_to_single_row
         else:
             raise ValueError(rule)
         self.rule=rule
     
     @abstractmethod
-    def merge_method(self, five_col_rows: pd.DataFrame, targets: list[str])->tuple[int, dict]:
+    def merge_method(self, five_col_rows: pd.DataFrame, targets: list[str])->dict:
         raise NotImplementedError
 
     def re_init(self, idx, init_config_criteria:bool=False):
@@ -49,14 +50,14 @@ class TcMerger():
         self.crit0 = self.criteria[idx]
         self.idx_to_be_merged=[]
 
-    def merge_all_tcs(self, five_col_rows:pd.DataFrame, targets: list[str]=["max_Tc", "min_Tc", "avg_Tc"])->tuple[int, dict]:
+    def merge_all_tcs(self, five_col_rows:pd.DataFrame, targets: list[str]=["max_Tc", "min_Tc", "avg_Tc"])->dict:
         out={}
         for ta in targets:
             if ta=="max_Tc":
-                max_tc = np.max([tc for tc in five_col_rows[:][ta]])
+                max_tc = np.max([tc for tc in five_col_rows[:][ta] if not pd.isna(tc)])
                 out[ta]=max_tc
             elif ta=="min_Tc":
-                min_tc = np.min([tc for tc in five_col_rows[:][ta]])
+                min_tc = np.min([tc for tc in five_col_rows[:][ta] if not pd.isna(tc)])
                 out[ta]=min_tc
             elif ta=="avg_Tc":
                 mean_tcs = [] # to calculate new mean, 
@@ -65,14 +66,14 @@ class TcMerger():
                 out[ta] = np.mean(mean_tcs)
         return out
 
-    def merge_to_single_row(self, five_col_rows:pd.DataFrame, targets: list[str]=["max_Tc", "min_Tc", "avg_Tc"])->tuple[int, dict]:
+    def merge_to_single_row(self, five_col_rows:pd.DataFrame, targets: list[str]=["max_Tc", "min_Tc", "avg_Tc"])->dict:
         if self.rule=="max_Tc": # choose row have highest Tc.
             out = five_col_rows.sort_values(by=self.rule, ascending=False)
         elif self.rule=="min_Tc": # choose row have lowest Tc.
             out = five_col_rows.sort_values(by=self.rule, ascending=True)
         else:
             raise ValueError
-        return out.iloc[0].to_dict()
+        return out.loc[:,targets].iloc[0].to_dict()
     
     def end_of_criteria(self, idx, df, targets, idx_to_drop):
         if len(self.idx_to_be_merged)==1:
@@ -89,18 +90,27 @@ class TcMerger():
             
 
 class Converter():
-    def __init__(self, dataset: Dataset, dataset_config, convert_config, save_dir=None, test:bool = False) -> None:
-        self.dataset = Dataset(dataset, config=dataset_config)
-        self.dataset.validate_by_composition()
-        self.dataset.pymatgen_duplicates(rtol=0.02)
+    def __init__(self, data_path, convert_config, test:bool = False) -> None:
         self.config = config_parser(config=convert_config, mode="convert")
-        self.dataset.add_duplicated_comps_column(criteria_rule=self.config['duplicates_rule'].get("criteria"))
-        self.save_dir = save_dir
+        self.log={} # temporal logging dict..
+        self.log['command_line_args']={
+            "data_path":data_path,
+            "convert_config":convert_config,
+            "test":test}
+        self.log["config"]=self.config.copy()
+        self.dataset = Dataset(data_path, self.config['dataset_config'])
+        self.dataset.validate_by_composition()
+        if self.config.get("duplicates_rule") is not None:
+            self.dataset.pymatgen_duplicates(rtol=0.02)
+            self.log["duplicated_comps"]=self.dataset.duplicated_comps_group
+            self.dataset.add_duplicated_comps_column(criteria_rule=self.config['duplicates_rule'].get("criteria"))
+        self.save_dir = self.config.get('save_compositional5_dir')
         self.test = test
         self.converted_df: pd.DataFrame
 
+
     def convert(self):
-        out_df=self.convert_tables(self.dataset, config=self.config)
+        out_df=self.convert_tables(self.dataset)
         if self.test:
             from io import StringIO
             buffer = out_df.to_csv(index=False)
@@ -109,25 +119,34 @@ class Converter():
             assert b["elements_fraction"].apply(lambda x: all(isinstance(i, (int, float)) for i in ast.literal_eval(x))).all()
             assert b.drop(columns=["elements", "elements_fraction"]).apply(lambda x: all(isinstance(i, float) for i in x)).all()
         elif self.save_dir is not None:
-                out_df.to_csv(self.save_dir, index=False)
+            out_df.to_csv(self.save_dir, index=False)
+            if self.config.get('save_log_dir') is not None:
+                with open(self.config['save_log_dir'], 'w', encoding="utf-8") as f:
+                    json.dump(self.log, f, indent=4, ensure_ascii=False)
         else:
             self.converted_df = out_df
     
-    def convert_tables(self, dataset: Dataset, config = "five_col.json"):
-        config=config_parser("five_col.json", mode="convert")
+    def convert_tables(self, dataset: Dataset):
+        config=self.config
         targets=dataset.config["targets"]
+
         target_df = process_targets(
             df=dataset.dataframe,
             targets=targets,
             return_num_tcs=True,
             exception_row=None,
             non_sc_rule='nan')
-        out_df = merge_dfs(target_df, dataset.dataframe[config["keep_cols"]], )
-        out_df = self.merge_duplicates(config, out_df, targets)
+        
+        out_df = merge_dfs(target_df, dataset.dataframe.loc[:,config["keep_cols_from_dataset"]])
+        if config.get("keep_merged_dataset_index") is not None:
+            out_df[config["keep_merged_dataset_index"]]=list(range(len(out_df)))
+        if config.get("duplicates_rule") is not None:
+            out_df = self.merge_duplicates(config, out_df, targets)
+        out_df = out_df.drop(columns=config["drop_cols_after_merge_duplicates"])
         out_df = self.exclude_exceptions(config, out_df)
         return out_df
     
-    def merge_duplicates(self, config, out_df, targets):
+    def merge_duplicates(self, config, out_df: pd.DataFrame, targets):
         """should be ran before self.exclude_exceptions().
 
         modify representative(merged) row, return indices to drop.
@@ -138,7 +157,7 @@ class Converter():
         if criteria_rule=="single_ref":
             criteria=out_df["full citation"].to_list()
         elif criteria_rule=="dataset":
-            criteria=[1]*len(len(out_df))
+            criteria=list(range(len(out_df)))
         else:
             raise NotImplementedError(config["duplicates_rule"]["criteria"])
     
@@ -160,22 +179,41 @@ class Converter():
             
 
     def exclude_exceptions(self, config, out_df):
+        """
+        drop rows with invalid values
+        """
+        self.log["exceptions"]={}
         print(f"shape of df before exceptions: {out_df.shape}")
+        self.log["exceptions"]["shape(df)_before_exceptions"]=out_df.shape
         # filter1. non_sc_observed
         out_df = out_df.dropna()
         print(f"shape of df after pd.dropna: {out_df.shape}")
         #filter1. num_elements:
         num_el_range = config["exceptions"].get("num_elements")
+        keep_rows=[]
         if num_el_range is not None:
-            out_df = out_df[[len(x)>= num_el_range['min'] for x in out_df["elements"]]]
-            out_df = out_df[[len(x)<= num_el_range['max'] for x in out_df["elements"]]]
+            for idx, row in out_df.iterrows():
+                elements_number = len(row["elements"])
+                for el in row["elements"]:
+                    if el in config["exceptions"]["num_elements"]["ignore_elements"]:
+                        elements_number=elements_number-1
+
+                if elements_number<= num_el_range['min']:
+                    keep_rows.append(False)
+                elif elements_number >= num_el_range['max']:
+                    keep_rows.append(False)
+                else:
+                    keep_rows.append(True)
+        out_df = out_df.loc[keep_rows]
         print(f"shape of df satisfying num_elements condition: {out_df.shape}")
+        self.log["exceptions"]["shape(df)_after_num_elements_exceptions"]=out_df.shape
         #filter2. Tc
         tc_range = config["exceptions"].get("tc")
         if tc_range is not None:
             out_df = out_df[out_df["min_Tc"] > tc_range['min']]
             out_df = out_df[out_df['max_Tc']<tc_range['max']]
         print(f"shape of df satisfying Tc condition: {out_df.shape}")
+        self.log["exceptions"]["shape(df)_after_tc_exceptions"]=out_df.shape
         return out_df
 
 if __name__ == "__main__":
@@ -183,13 +221,11 @@ if __name__ == "__main__":
                     prog='convert_tables',
                     description='convert between different formats')
     parser.add_argument('dataset')
-    parser.add_argument('dataset_config', default="default_forward.json")
-    parser.add_argument('convert_config', default="five_col.json")
-    parser.add_argument('-s', '--save_dir', default=None)
+    parser.add_argument('convert_config')
     parser.add_argument('-t', '--test', action='store_true', default=False)
     args=parser.parse_args()
     
-    converter = Converter(args.dataset, args.dataset_config, args.convert_config, save_dir=args.save_dir, test=args.test)
+    converter = Converter(args.dataset, args.convert_config, args.test)
     converter.convert()
 
-# `python conversion path\to\merged_dataset_forward.xlsx default_forward.json `
+# `python conversion path\to\merged_dataset_forward.xlsx compositional5_all_tc.json `

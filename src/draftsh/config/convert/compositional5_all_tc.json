@@ -1,12 +1,9 @@
 {
-    "conversion":{
-        "from": "inhouse-merged",
-        "to": "five_columns"
-    },
     "exceptions":{
         "num_elements":{
             "min":4,
-            "max":30
+            "max":30,
+            "ignore_elements":["H", "He", "C", "N", "O", "F", "Ne"]
         },
         "tc":{
             "non_sc_observed": true,
@@ -14,15 +11,21 @@
             "min": 0.0
         }
     },
-    "dataset_config": "default_forward.json",
-    "keep_cols": [
+    "keep_cols_from_dataset": [
         "elements",
         "elements_fraction",
-        "duplicated_group",
         "full citation"
+    ],
+    "drop_cols_after_merge_duplicates":[
+        "full citation",
+        "num_valid_tc"
     ],
     "duplicates_rule":{
         "tc": "all_tcs",
         "criteria": "single_ref"
-    }
+    },
+    "dataset_config": "default_forward.json",
+    "save_compositional5_dir": "temp_devs/compositional5_all_tc.csv",
+    "save_log_dir": "temp_devs/compositional5_all_tc.log.json",
+    "keep_merged_dataset_index": "idx_0917"
 }
