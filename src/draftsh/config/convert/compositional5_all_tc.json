@@ -14,7 +14,8 @@
     "keep_cols_from_dataset": [
         "elements",
         "elements_fraction",
-        "full citation"
+        "full citation",
+        "xu_test_set"
     ],
     "drop_cols_after_merge_duplicates":[
         "full citation",
@@ -27,5 +28,5 @@
     "dataset_config": "default_forward.json",
     "save_compositional5_dir": "temp_devs/compositional5_all_tc.csv",
     "save_log_dir": "temp_devs/compositional5_all_tc.log.json",
-    "keep_merged_dataset_index": "idx_0917"
+    "keep_merged_dataset_index": "idx_0918"
 }

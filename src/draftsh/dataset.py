@@ -37,8 +37,9 @@ class BaseDataset(ABC):
     """
     def __init__(
             self, data_path: Optional[Path | str],
+            comps_pymatgen_col: str="comps_pymatgen",
             drop_cols: Optional[list[str]] = None,
-            exception_col: Optional[str | list[str]] = None):
+            exception_col: Optional[str | list[str]] = None,):
         if drop_cols is None:
             self.drop_cols = []
         else:
@@ -46,6 +47,7 @@ class BaseDataset(ABC):
         self.dset_path: Path = data_path
         self.dataframe: pd.DataFrame = pd.DataFrame()
         self.exception_col = exception_col
+        self.comps_pymatgen_col = comps_pymatgen_col
 
     @abstractmethod
     def load_data(self) -> pd.DataFrame:
@@ -75,26 +77,73 @@ class BaseDataset(ABC):
         else:
             return self.dataframe["comps_pymatgen"]
         
-    def pymatgen_duplicates(self, save_dir=None, rtol=0.1, comps_pymatgen_col='comps_pymatgen', return_dict:bool=True):
+    def pymatgen_duplicates(self, other_df:Optional[pd.DataFrame]=None, save_dir=None, exception_map:Optional[dict]=None, rtol=0.1, return_dict:bool=True):
+        """
+        compare elements and elements_fraction, find duplicates. 
+
+        update attributes;
+            * `self.duplicated_comps_group`(dictionary)
+            * `self.duplicated_comps` (set)
+        to compare, elements fractions are always normalized 
+            - to meet `sum(fractions)==1.0`
+
+        arguments:
+            * other_df: Optional[pd.DataFrame].
+                * if None, compare in-between (default)
+                * if not None, other_df should have comps_pymatgen_col column().
+                    * **note that it will overwrite `self attributes`**
+        
+        notes:
+            * pymatgen.core.Composition().almost_equals() does not normalizes as I wanted, So I couldn't use that.
+
+        arguments 
+        other_df:Optional[pd.dataframe]=None
+        """
+        comps_pymatgen_col = self.comps_pymatgen_col
         self.duplicated_comps_group={}
         self.duplicated_comps=set()
-        for idx, row in self.dataframe.iterrows():
-            if idx not in self.duplicated_comps:
+        if other_df is None:
+            df1=self.dataframe
+        else:
+            assert type(self).__name__=='XuTestHEA', "compare with other_df is implemented only for XuTestHEA"
+            df1=other_df
+        for idx0, row0 in self.dataframe.iterrows():
+            if idx0 not in self.duplicated_comps:
                 duplicated_row={}
-                for iidx, rrow in self.dataframe[idx:].iterrows():
-                    if almost_equals_pymatgen_atomic_fraction(rrow[comps_pymatgen_col], row[comps_pymatgen_col], rtol=rtol):
-                        duplicated_row[iidx]=rrow[comps_pymatgen_col]
-                if len(duplicated_row)>=2: #including self, so it should be larger than 1.
-                    print(f"idx, duplicated_idx: {idx}, {duplicated_row}")
-                    self.duplicated_comps.update(list(duplicated_row.keys()))
-                    self.duplicated_comps_group[idx]={
+                idx1_start = 0 if other_df is not None else idx0 # when compare self, (i,j)==(j,i)
+                row0_compare=row0[comps_pymatgen_col]
+                if exception_map is not None:
+                    if idx0 in exception_map:
+                        row0_compare=df1.loc[exception_map[idx0], comps_pymatgen_col]
+
+                for idx1, row1 in df1[idx1_start:].iterrows():
+                    if almost_equals_pymatgen_atomic_fraction(row1[comps_pymatgen_col], row0_compare, rtol=rtol):
+                        duplicated_row[idx1]=row1[comps_pymatgen_col]
+
+                for idx1, row1 in df1[idx1_start:].iterrows():
+                    if almost_equals_pymatgen_atomic_fraction(row1[comps_pymatgen_col], row0[comps_pymatgen_col], rtol=rtol):
+                        duplicated_row[idx1]=row1[comps_pymatgen_col]
+                minimum_length = 2 if other_df is None else 1 #when self compare, it includes self.
+                if len(duplicated_row)>=minimum_length:
+                    print(f"idx0, duplicates: {idx0}, {duplicated_row}")
+                    self.duplicated_comps_group[idx0]={
                         k: str(v) for k, v in duplicated_row.items()
                         }
+                    if other_df is None:
+                        # when other_df, `idx0 not in self.duplicated_comps` should be false always
+                        self.duplicated_comps.update(list(duplicated_row.keys()))
+                    else:
+                        # 
+                        self.duplicated_comps_group[idx0][f"self_{idx0}"]=str(row0[comps_pymatgen_col])
+                        if exception_map is not None:
+                            if idx0 in exception_map:
+                                self.duplicated_comps_group[idx0][f"replace_to_nominal_comp_idx0918({exception_map[idx0]})"]=str(row0_compare)
+
         if save_dir is not None:
             with open(save_dir, 'w', encoding="utf-8") as f:
                 json.dump(self.duplicated_comps_group, f, indent=4, ensure_ascii=False)
     
-    def validate_by_composition(self):
+    def validate_by_composition(self, rtol:float=0.001):
         allowed = set(string.ascii_letters + string.digits + '.')
         for idx, row in self.dataframe.iterrows():
             comp=None
@@ -111,7 +160,7 @@ class BaseDataset(ABC):
                 elif idx in list(range(270, 276)): #x variable
                     pass
                 else:
-                    if almost_equals_pymatgen_atomic_fraction(row["comps_pymatgen"], comp, rtol=0.001):
+                    if almost_equals_pymatgen_atomic_fraction(row["comps_pymatgen"], comp, rtol=rtol):
                         pass
                     else:
                         assert row["comps_pymatgen"].elements==comp.elements
@@ -132,15 +181,7 @@ class BaseDataset(ABC):
             duplicate_groups.append(group_row)
         self.dataframe['duplicated_group']=duplicate_groups
         return duplicate_groups
-
-                            
-
-                        
-                
-        
-
-        
-
+    
     def assign_dtypes(self):
         for col in self.dataframe.columns:
             if not self.dataframe.col.dtype in (list, dict, float, str):
@@ -173,9 +214,12 @@ class D2TableDataset(BaseDataset):
         if xls_path.is_absolute():
             pass
         else:
-            with resources.as_file(resources.files("draftsh.data").joinpath(xls_path)) as pth:
-                xls_path = pth
-            assert xls_path.is_file(),FileNotFoundError
+            if xls_path.is_file():
+                pass
+            else:
+                with resources.as_file(resources.files("draftsh.data").joinpath(xls_path)) as pth:
+                    xls_path = pth
+                assert xls_path.is_file(),FileNotFoundError
 
         super().__init__(xls_path, drop_cols = drop_cols)
         self.sheet = notebook
@@ -202,13 +246,12 @@ class D2TableDataset(BaseDataset):
 
 class Dataset(D2TableDataset):
     """
-    - methods
-        - __init__
-            - load sc_hea_dataset (xlsx file).
-            - SC-HEA Dataset
-                - LiteratureReview/datatable/SC_HEA_dataset_CY_JH_temp.xlsx
-    - attributes
-        - exception_col: simple filter by specific column values
+    attributes:
+        * exception_col: simple filter by specific column values
+
+    methods:
+        * validate_elem_frac_length:
+    
     """
     def __init__(self, 
                  xls_path, 

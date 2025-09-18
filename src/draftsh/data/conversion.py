@@ -216,16 +216,20 @@ class Converter():
         self.log["exceptions"]["shape(df)_after_tc_exceptions"]=out_df.shape
         return out_df
 
+COMMAND_LINE_ARGS=False
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-                    prog='convert_tables',
-                    description='convert between different formats')
-    parser.add_argument('dataset')
-    parser.add_argument('convert_config')
-    parser.add_argument('-t', '--test', action='store_true', default=False)
-    args=parser.parse_args()
-    
-    converter = Converter(args.dataset, args.convert_config, args.test)
-    converter.convert()
-
+    if COMMAND_LINE_ARGS:
+        parser = argparse.ArgumentParser(
+                        prog='convert_tables',
+                        description='convert between different formats')
+        parser.add_argument('dataset')
+        parser.add_argument('convert_config')
+        parser.add_argument('-t', '--test', action='store_true', default=False)
+        args=parser.parse_args()
+        
+        converter = Converter(args.dataset, args.convert_config, args.test)
+        converter.convert()
+    else:
+        converter = Converter(r"C:\Users\chyi\draftsh2025\temp_devs\merged_dataset_forward.csv", "compositional5.json")
+        converter.convert()
 # `python conversion path\to\merged_dataset_forward.xlsx compositional5_all_tc.json `

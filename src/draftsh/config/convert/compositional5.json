@@ -13,7 +13,8 @@
     },
     "keep_cols_from_dataset": [
         "elements",
-        "elements_fraction"
+        "elements_fraction",
+        "xu_test_set"
     ],
     "drop_cols_after_merge_duplicates":[
         "num_valid_tc"
@@ -21,5 +22,5 @@
     "dataset_config": "default_forward.json",
     "save_compositional5_dir": "temp_devs/compositional5.csv",
     "save_log_dir": "temp_devs/compositional5.log.json",
-    "keep_merged_dataset_index": "idx_0917"
+    "keep_merged_dataset_index": "idx_0918"
 }
