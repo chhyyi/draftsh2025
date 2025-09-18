@@ -79,7 +79,7 @@ class TcMerger():
         if len(self.idx_to_be_merged)==1:
             pass
         elif len(self.idx_to_be_merged)>1:
-            dict = self.merge_method(df.loc[self.idx_to_be_merged], targets)
+            dict = self.merge_method(df.loc[[self.idx0]+self.idx_to_be_merged.copy()], targets)
             for k, v in dict.items():
                 df.loc[self.idx0, k]=v
             assert self.idx0 not in self.idx_to_be_merged
@@ -210,8 +210,8 @@ class Converter():
         #filter2. Tc
         tc_range = config["exceptions"].get("tc")
         if tc_range is not None:
-            out_df = out_df[out_df["min_Tc"] > tc_range['min']]
-            out_df = out_df[out_df['max_Tc']<tc_range['max']]
+            out_df = out_df[out_df["max_Tc"] > tc_range['min']]
+            out_df = out_df[out_df['min_Tc']<tc_range['max']]
         print(f"shape of df satisfying Tc condition: {out_df.shape}")
         self.log["exceptions"]["shape(df)_after_tc_exceptions"]=out_df.shape
         return out_df
