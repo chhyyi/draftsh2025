@@ -58,10 +58,12 @@ class ConfigSingleSource():
         * iter_vars: list[str]
             * config_dic[iter_vars[idx]]: list[str] for valid idx.
             * should follow the loop - hierarchy of featurizer like `matminer.featurizers.composition.composite.Elementproperty().featurize()`
-        * non_iter_vars: list[str]
+        * non_iter_vars: list[str].
+            * return(tuple) starts with [config_dict[v] for v in non_iter_vars] before iter_vars.
         
     method:
         * iter_config: return iterator
+            `return product(*self.iterate_lists)`
     
     config_dic example:
         {
@@ -73,7 +75,7 @@ class ConfigSingleSource():
     """
     def __init__(self, config_dict: dict, non_iter_vars:list[str] = ["src"], iter_vars:list[str] = ["feature", "stat"]):
         self.config = config_dict
-        self.iterate_lists = [[v] for v in non_iter_vars]
+        self.iterate_lists = [[config_dict[v]] for v in non_iter_vars]
         self.iterate_lists = self.iterate_lists + [self.config[var] for var in iter_vars]
         
         self.shape = map(len, self.iterate_lists)

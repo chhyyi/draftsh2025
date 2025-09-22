@@ -41,8 +41,8 @@ def specific_value(
     found_col = 0
     if fixing_columns:
         if col_type == "matminer_expanded":
-            for idx, feat_col in enumerate(featurizer.col_names[col_type]):
-                if feat_col == f'{weight}_{feature[0]}_{stats[0]}':
+            for idx, feat_col in enumerate(featurizer.col_names):
+                if feat_col == f'{source}_{feature[0]}_{stats[0]}':
                     found_col = found_col+1
                     print(idx)
                     if idx!=specific_idx[2]:

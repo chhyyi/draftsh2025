@@ -99,24 +99,29 @@
                 "std_dev",
                 "avg_dev"
             ]
-        },
+        }
     ],
     "matminer_secondary": [
         {
             "src": "inhouse_secondary",
             "feature": ["configurational_entropy"],
-            "stat": ["self"]
+            "stat": ["self_prop"]
         },
         {
             "src": "inhouse_secondary",
-            "feature": ["occu_ve"],
-            "stat": ["s", "p", "d", "f"],
+            "feature": [
+                "occu_ve_s",
+                "occu_ve_p",
+                "occu_ve_d",
+                "occu_ve_f"
+            ],
+            "stat": ["self_prop"],
             "description": "Occupation states of valenece electron, shown in Table 2 of Xu, S. Predicting superconducting temperatures with new hierarchical neural network AI model. Front. Phys. 20, 14205 (2025)."
         },
         {
             "src": "inhouse_secondary",
             "feature": ["ionicity"],
-            "stat": ["mean", "maximum", "bool"]
+            "stat": ["self_prop::mean", "self_prop::max", "self_prop::bool"]
         }
     ]
 }

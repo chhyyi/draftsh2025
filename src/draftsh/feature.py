@@ -121,7 +121,7 @@ class MyElementProperty(ElementProperty):
     """
     def featurize_uw to 'unweight'.
     """
-    def __init__(self, data_source: AbstractData | str, features: list[str], stats: list[str], impute_nan=False, unweight: bool = False):
+    def __init__(self, data_source: AbstractData | str, features: list[str], stats: list[str], impute_nan=False, unweight: bool = False, config=None):
         super().__init__(data_source, features, stats, impute_nan)
         self.unweight = unweight
         assert unweight == False, NotImplementedError
@@ -129,7 +129,7 @@ class MyElementProperty(ElementProperty):
         if data_source == "mast-ml":
             self.data_source = MastMLMagpieData(impute_nan = self.impute_nan)
         else:
-            assert isinstance(data_source, AbstractData)
+            assert isinstance(self.data_source, AbstractData)
 
 class InhouseSecondary(AbstractData):
     """
@@ -137,7 +137,7 @@ class InhouseSecondary(AbstractData):
     
     to featurize 8 descriptors of table 2 of xu et al 2025,
     self.get_elemental_property() return required data.
-    Will be consumed by MyElementProperty2nd().featurize()
+    Will be consumed by MyElementProperty().featurize()
     """
     def __init__(self, configs: dict, impute_nan: bool = False):
         assert impute_nan==False
@@ -147,74 +147,137 @@ class InhouseSecondary(AbstractData):
         self.config_per_sources = [ConfigSingleSource(config_1source) for config_1source in configs]
     
         self.first_properties=["NsValence", "NpValence", "NdValence", "NfValence", "NValence", "Electronegativity"]
-        magpie_data = MagpieData(data_dir=None, impute_nan=impute_nan, features=self.first_properties)
-        self.xu_eights_init(magpie_data)
-        # self.
-        # using old functions for xu8, calc table
+        with resources.as_file(resources.files("matminer.utils.data")) as path:
+            magpie_data = MagpieData(data_dir=path.joinpath("data_files", "magpie_elementdata"), impute_nan=impute_nan, features=self.first_properties)
+        self.xu_eights_init(magpie_data=magpie_data)
 
     def xu_eights_init(self, magpie_data: MagpieData):
+        self.configurational_entropy_init()
+        self.occu_ve_init(magpie_data=magpie_data)
+        self.ionicity_init(magpie_data=magpie_data)
         for config_1source in self.config_per_sources:
             for names in config_1source.iter_config():
-                self.available_props.append("_".join(names))
+                col_name="_".join(names)
+                #delete some parameters used when featurize. see `draftsh\config\feature\xu.json`
+                col_name.replace("_self_prop::", "_")
+                col_name.replace("_self_prop", "")
+                self.available_props.append(col_name)
         
-    def configurational_entropy(self, _):
-        """it depends only on fractions"""
-        return 1
+    def configurational_entropy_init(self) -> int:
+        """it depends only on fractions
+
+        return number of final columns when this property called.
+        """
+        self.all_elemental_props["configurational_entropy"]={}
+        for el in Element:
+            self.all_elemental_props["configurational_entropy"][el.symbol]={
+                "func": self.configurational_entropy
+            }
+        return 1 
     
-    def occu_ve_init(self, magpie_data):
-        for el in Element:
-            orbs = ["NsValence", "NpValence", "NdValence", "NfValence", "NValence"]
-            out = {}
-            for orb in orbs:
-                orb_valence_electron=magpie_data.get_elemental_property(el.symbol, orb)
-                out[orbs]=orb_valence_electron
-            self.all_elemental_props["occu_ve"][el.symbol]=out
+    @staticmethod
+    def configurational_entropy(_, fractions):
+        """per R.
 
-    def ionicity_init(self, magpie_data):
-        for el in Element:
-            el.sym
-
-    def val_electron_occupation(test_comp, impute_nan: bool = True):
+        implemented by JH Park, 
+        instead of configurational entropy.
         """
-        occupation state of valence electron
-        """
-        orbs = ["NsValence", "NpValence", "NdValence", "NfValence",]
-        occu4orbits=ElementProperty(data_source="magpie", features = orbs,
-                                    stats=["mean"], impute_nan=impute_nan)
-        n_valence=ElementProperty(data_source="magpie", features = ["NValence"],
-                                stats=["mean"], impute_nan=impute_nan)
-        return np.array(occu4orbits.featurize(comp=test_comp))/np.array(n_valence.featurize(comp=test_comp))
+        arr = np.array(fractions, dtype=float)
+        return -np.sum(arr * np.log(arr))
+    
+    def occu_ve_init(self, magpie_data)->int:
+        """elemental data, occupation state of valence electron
 
-    def ionicity(test_comp, impute_nan: bool = True):
+        from for xu et al 2025 table II
+        should return s,p,d,f valence electrons altogether, to reproduce the equation
+
+        return number of final columns when this property called
+        """
+        orbs = ["NsValence", "NpValence", "NdValence", "NfValence"]
+        feature_names_orbs = ["occu_ve_s", "occu_ve_p", "occu_ve_d", "occu_ve_f"]
+        for fn_orb in feature_names_orbs:
+            self.all_elemental_props[fn_orb]={}
+
+        for orb, fn_orb in zip(orbs, feature_names_orbs):
+            for el in Element:
+                nv = magpie_data.get_elemental_property(el, "NValence")
+                self.all_elemental_props[fn_orb][el.symbol]={
+                    "NValence": nv,
+                    "OrbValence":magpie_data.get_elemental_property(el, orb),
+                    "func": self.occu_ve
+                    }
+        return 4
+
+    def occu_ve_s(self, el):
+        return self.all_elemental_props["occu_ve_s"][el]
+    
+    def occu_ve_p(self, el):
+        return self.all_elemental_props["occu_ve_p"][el]
+    
+    def occu_ve_d(self, el):
+        return self.all_elemental_props["occu_ve_d"][el]
+    
+    def occu_ve_f(self, el):
+        return self.all_elemental_props["occu_ve_f"][el]    
+    
+    @staticmethod
+    def occu_ve(data_lst, weights = None):
+        """
+        args:
+            assert orb in ("s", "p", "d", "f")
+            data_lst should be `[{orb:val, "NValence":val}, ...]
+        """
+        assert weights is not None
+        denom = np.dot([el_data["NValence"] for el_data in data_lst], weights)
+        return np.dot([el_data["OrbValence"] for el_data in data_lst], weights)/denom
+    
+    def ionicity_init(self, magpie_data)-> int:
+        """from for xu et al 2025 table II
+
+        return number of final columns when this property called(1)
+        """
+        self.all_elemental_props["ionicity"]={}
+        for el in Element:
+            self.all_elemental_props["ionicity"][el.symbol]={
+                "func": self.ionicity,
+                "electronegativity": float(magpie_data.get_elemental_property(el, "Electronegativity"))
+            }
+        return 1
+
+    @staticmethod
+    def ionicity(data_lst, fracs, last_stat):
         """ionicity
 
-        following supplement table 2 of Xu et al.(2024) **Not 2025**
-            * [Xu et al 2024](https://www.nature.com/articles/s41524-024-01386-4)
-        $I = 1-e^{1/4 \\sum_i{x_i |f_i - \\bar{f}|}}$,
-            where $f_i$ is electronegativity.
-        and bool criteria (True if I>1.7 else False)
+        following supplement table 2 and the descriptions from of Xu et al.(2024) **Not 2025**
+            * [Xu et al 2024](https://www.nature.com/articles/s41524-024-01386-4)        
+            *descriptions:
+                ```
+                In the seventh row, f pertains to electronegativity, with $\\bar{f}$ indicating either the average or maximum electronegativity, corresponding to ‘ave’ and ‘max’ in the table; for the ‘boolean’ value, when $\\bar{f}$ is the average and I exceeds 1.7, it is set to 1, otherwise, it is 0 (this serves as the criterion for determining the formation of ionic bonds), totaling three items. 
+                ```
+            * equation on the table
+                $I = 1-e^{1/4 \\sum_i{x_i |f_i - \\bar{f}|}}$,
+                    where $f_i$ is electronegativity.
+            * bool criteria (True if I>1.7 else False)
         """
-        prop=ElementProperty(data_source="magpie", features = ["Electronegativity",],
-                            stats=["mean", "maximum"], impute_nan=impute_nan)
-        #for unidentified reason, nan masked(from pandas) inputed with valid floating numbers
-
-        mean_ene, max_ene = prop.featurize(test_comp)
-        elems, fracs = zip(*test_comp.element_composition.items())
-        enes = [float(prop.data_source.get_elemental_property(e, "Electronegativity")) for e in elems]
+        enes = [e["electronegativity"] for e in data_lst]
 
         if pd.isna(enes).any():
             print(f"is_nan enes, fracs:{fracs}, {pd.isna(enes)}, \
-                elem:{elems}, types:{[type(ene) for ene in enes]}, \
+                enes:{enes}, types:{[type(ene) for ene in enes]}, \
                     np.ma.is_masked:{[np.ma.is_masked(ene) for ene in enes]}")
         def ionicity_calc(fracs, enes, criteria):
             sum_sum=np.sum([frac*np.abs(ene-criteria) for ene, frac in zip(enes, fracs)])
             return 1-np.exp(-(1/4)*sum_sum)
-
-        ion_mean = ionicity_calc(fracs, enes, mean_ene)
-        ion_max = ionicity_calc(fracs, enes, max_ene)
-
-        return ion_mean, ion_max, 1 if ion_mean>1.7 else 0
-        
+        if last_stat=="mean":
+            return ionicity_calc(fracs, enes, np.mean(enes))
+        elif last_stat=="max":
+            return ionicity_calc(fracs, enes, np.max(enes))
+        elif last_stat=="bool":
+            return 1 if ionicity_calc(fracs, enes, np.mean(enes))>1.7 else 0
+    
+    def get_elemental_property(self, elem, property_name):
+        return self.all_elemental_props[property_name][elem.symbol]
+    
     def get_elemental_properties(self, elems, property_name):
         """Get elemental properties for a list of elements
 
@@ -269,21 +332,21 @@ class MultiSourceFeaturizer():
     
     def init_feature_config(self, config: dict):
         # init matminer configs
-        num_matminer_features = 0
-        matminer_col_names = []
+        num_features = 0
+        col_names = []
         for source in config["sources"]:
-            if source == "matminer" or source == "matminer_expanded":
+            if source in ("matminer", "matminer_expanded", "matminer_secondary"):
                 assert isinstance(config[source], list), f"config[source] should be a list of dictionaries but: {config[source]}"
                 for config_1source in config[source]:
                     config_single_source = ConfigSingleSource(config_1source)
-                    num_matminer_features += len(config_single_source)
+                    num_features += len(config_single_source)
                     for srcc, feat, stat in config_single_source.iter_config():
-                        matminer_col_names.append(f"{srcc}_{feat}_{stat.replace("::","_")}")
+                        col_names.append(f"{srcc}_{feat}_{stat.replace("::","_")}")
             elif source == "materials_project":
                 raise NotImplementedError(source)
             else:
                 raise ValueError(source)
-        return num_matminer_features, matminer_col_names
+        return num_features, col_names
         # if "xu_eight" in self.config["sources"]:
         #     raise ValueError("xu_eight is merged with matminer_expanded")
         #     self.xu_eight: bool = bool(self.config["xu_eight"])
@@ -310,29 +373,28 @@ class MultiSourceFeaturizer():
             * config: for single source, shoud have "src", "feature", "stat" keys.
         """
         # set data_source
-        data_source=config["src"]
-        
         for config_single_source in config:
-            featurizer = MyElementProperty(data_source = data_source, features=config_single_source["feature"], stats=config_single_source["stat"])
+            data_source=config_single_source["src"]
+            featurizer = MyElementProperty(data_source = data_source, features=config_single_source["feature"], stats=config_single_source["stat"], config=config_single_source)
             featurizer.featurize_dataframe(featurized_df, col_id = comps_col, inplace=True)
         return featurized_df
     
-    def featurize_matminer_2nd(self,
+    def featurize_matminer2nd(self, 
                            featurized_df: pd.DataFrame,
                            config: dict,
                            comps_col: str = "comps_pymatgen",
                            impute_nan: bool = True,
                            ) -> pd.DataFrame:
-        data_source=InhouseSecondary(configs = config, impute_nan=impute_nan) # not to initialize this instance.
+        """
+        in this case, do not init featurizer but just use one featurizer
+        """
+        data_source=InhouseSecondary(configs=config)
         for config_single_source in config:
-            featurizer = MyElementProperty2nd(
-                data_source = data_source,
-                features=config_single_source["feature"],
-                stats=config_single_source["stat"]
-                )
-            featurized_df = featurizer.featurize_dataframe(featurized_df, col_id = comps_col, inplace=False)
+            featurizer=MyElementProperty(data_source=data_source, features=config_single_source["feature"], stats=config_single_source["stat"], config=config_single_source)
+            featurizer.featurize_dataframe(featurized_df, col_id = comps_col, inplace=True)
         return featurized_df
-
+    
+        
     
     def featurize_all(self,
                       df: pd.DataFrame,
@@ -351,10 +413,10 @@ class MultiSourceFeaturizer():
         """
         featurized_df = df[["comps_pymatgen"]]
         for src in self.config["sources"]:
-            if src == "matminer" or src == "matminer_expanded":
-                featurized_df = self.featurize_matminer(featurized_df, config=self.config[src])
-            elif src == "matminer_secondary":
-                featurized_df = self.featurize_matminer_2nd(featurized_df, config=self.config[src])
+            if src in ("matminer", "matminer_expanded"):
+                featurized_df = self.featurize_matminer(featurized_df, config=self.config[src], impute_nan=False)
+            elif src=="matminer_secondary":
+                featurized_df = self.featurize_matminer2nd(featurized_df, config=self.config[src], impute_nan=False)
             else:
                 raise NotImplementedError(src["src"])
         
@@ -397,22 +459,18 @@ class CustomPropertyStats(PropertyStats):
         see `super().calc_stat` for further
         """
 
-        if "::" in stat:
-            statistics = stat.split("::")
-            if len(statistics)==2:
-                unweighted = statistics.pop()
-                if unweighted=="uw":
+        statistics = stat.split("::")
+        unparsed_stat_args=[]
+        if len(statistics)>=2:
+            for stat_arg in statistics[1:]:
+                if stat_arg=="uw":
                     weights = None
-                elif unweighted=="w":
+                elif stat_arg=="w":
                     pass
                 else:
-                    raise NotImplementedError("I did not considered to use some extra statistics parameters except for the `unweighted: 'uw' | 'w'`.")
-            else:
-                raise NotImplementedError("I did not considered to use some extra statistics parameters except for the `unweighted: 'uw' | 'w'`.")
+                    unparsed_stat_args.append(stat_arg)
 
-        else:
-            statistics = [stat]
-        return getattr(self, statistics[0])(data_lst, weights, *statistics[1:])
+        return getattr(self, statistics[0])(data_lst, weights, *unparsed_stat_args)
         
     @staticmethod
     def iter_pair(data_lst: list[float], weights: list[float], weights_rule = "temp") -> list[tuple[float, float, float]] | list[tuple[float, float]]:
@@ -473,7 +531,24 @@ class CustomPropertyStats(PropertyStats):
                 return ap_out, None
         else:
             raise ValueError(f"len(data_lst):{len(data_lst)}")
+        
+    @staticmethod
+    def self_prop(data_lst, weights, last_stat = None)->float | bool | int:
+        """
+        when property requires fractions
 
+        returns a number or bool(float, usually)
+        """
+        if last_stat is None:
+            return data_lst[0]["func"](data_lst, weights)
+        else:
+            return data_lst[0]["func"](data_lst, weights, last_stat)
+        
+    @staticmethod
+    def ionicity(data_lst, weights):
+        assert weights is not None
+        
+    
     def ap_mean(self, data_lst, weights = None):
         aps, ap_weights = self.call_ap(data_lst, weights)
         return np.average(aps, weights=ap_weights)
