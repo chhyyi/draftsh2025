@@ -231,6 +231,10 @@ class D2TableDataset(BaseDataset):
         else:
             pass
         self.dataframe: pd.DataFrame = df.reset_index(drop=True)
+        self.parse_elements_col()
+        self.parse_frac_col()
+        self.pymatgen_comps()
+
 
     def load_data(self) -> pd.DataFrame:
         if self.dset_path.suffix==".xlsx" or self.dset_path.stem==".xls":
@@ -244,6 +248,16 @@ class D2TableDataset(BaseDataset):
             raise TypeError("read only xlsx, xls, csv files(should have suffix).")
         return df.drop(columns=self.drop_cols)
 
+    def parse_elements_col(self, colname: str="elements"):
+        """parse string of xlsx cell with elements in list form"""
+        cell_parser = ElemParser()
+        return self.parse_col(colname, cell_parser, False)
+
+    def parse_frac_col(self, colname: str="elements_fraction"):
+        """parse string of xlsx cell with fractions in list form"""
+        cell_parser = FracParser()
+        return self.parse_col(colname, cell_parser, False)
+    
 class Dataset(D2TableDataset):
     """
     attributes:
@@ -264,27 +278,14 @@ class Dataset(D2TableDataset):
             notebook = self.config.get("sheetname"), 
             drop_cols = self.config.get("drop_cols", drop_cols), 
             exception_col=self.config.get("exception_col", exception_col))
-        self.parse_elements_col()
-        self.parse_frac_col()
         self.validate_elem_frac_length()
         self.elemental_set: set = self.elemental_stats()
-        self.pymatgen_comps()
 
     def validate_elem_frac_length(self):
         assert self.dataframe.apply(
             lambda x: (len(x["elements"])==len(x["elements_fraction"])), axis=1).all(),\
             self.dataframe.loc[self.dataframe.apply(
             lambda x: len(x["elements"])!=len(x["elements_fraction"]), axis=1)]
-
-    def parse_elements_col(self, colname: str="elements"):
-        """parse string of xlsx cell with elements in list form"""
-        cell_parser = ElemParser()
-        return self.parse_col(colname, cell_parser, False)
-
-    def parse_frac_col(self, colname: str="elements_fraction"):
-        """parse string of xlsx cell with fractions in list form"""
-        cell_parser = FracParser()
-        return self.parse_col(colname, cell_parser, False)
     
     def featurize_and_split(self,
                             featurizer: MultiSourceFeaturizer, test_size: float = 0.2,
