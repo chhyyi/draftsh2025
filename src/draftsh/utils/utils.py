@@ -45,7 +45,7 @@ def merge_dfs(src_df: pd.DataFrame, featurized_df: pd.DataFrame, reset_index=Tru
 
     shape_df = np.shape(featurized_df)
     shape_src_df = np.shape(src_df)
-    featurized_df = featurized_df.reset_index(drop=True).join(src_df.reset_index(drop=True))
+    featurized_df = src_df.reset_index(drop=True).join(featurized_df.reset_index(drop=True))
 
     assert featurized_df.shape[1] == shape_df[1]+shape_src_df[1]
     return featurized_df

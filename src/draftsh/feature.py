@@ -11,6 +11,9 @@ main functions:
 Todo:
     * ap_weights rule?
     * if np.isnan(out):
+    * `impute_nan` is hard coded in many parts.
+    * featurizer.set_n_jobs(self.config['n_jobs']) 
+        * because of some non-staticmethod for ap calc..
 """
 
 import re
@@ -115,7 +118,7 @@ class MastMLMagpieData(MagpieData):
     def __init__(self, impute_nan: bool):
         #dummy_magpie = MagpieData(impute_nan=impute_nan)
         with resources.as_file(resources.files("draftsh").joinpath("data", "vendor", "mastml", "mastml", "magpie")) as f:
-            super().__init__(data_dir = f, skip_lines_table=3)
+            super().__init__(data_dir = f, skip_lines_table=3, impute_nan=impute_nan)
 
 class MyElementProperty(ElementProperty):
     """
@@ -127,7 +130,7 @@ class MyElementProperty(ElementProperty):
         assert unweight == False, NotImplementedError
         self.pstats = CustomPropertyStats() #overrided
         if data_source == "mast-ml":
-            self.data_source = MastMLMagpieData(impute_nan = self.impute_nan)
+            self.data_source = MastMLMagpieData(impute_nan = impute_nan)
         else:
             assert isinstance(self.data_source, AbstractData)
 
@@ -341,7 +344,11 @@ class MultiSourceFeaturizer():
                     config_single_source = ConfigSingleSource(config_1source)
                     num_features += len(config_single_source)
                     for srcc, feat, stat in config_single_source.iter_config():
-                        col_names.append(f"{srcc}_{feat}_{stat.replace("::","_")}")
+                        #delete some parameters used when featurize. see `draftsh\config\feature\xu.json`
+                        col_name=f"{srcc}_{feat}_{stat.replace("::","_")}"
+                        col_name=col_name.replace("_self_prop::", "_")
+                        col_name=col_name.replace("_self_prop", "")
+                        col_names.append(col_name)
             elif source == "materials_project":
                 raise NotImplementedError(source)
             else:
@@ -374,8 +381,10 @@ class MultiSourceFeaturizer():
         """
         # set data_source
         for config_single_source in config:
+            print(f"start featurize {len(config_single_source["feature"])*len(config_single_source["stat"])} features: {config_single_source}")
             data_source=config_single_source["src"]
             featurizer = MyElementProperty(data_source = data_source, features=config_single_source["feature"], stats=config_single_source["stat"], config=config_single_source)
+            featurizer.set_n_jobs(self.config['n_jobs'])
             featurizer.featurize_dataframe(featurized_df, col_id = comps_col, inplace=True)
         return featurized_df
     
@@ -390,7 +399,10 @@ class MultiSourceFeaturizer():
         """
         data_source=InhouseSecondary(configs=config)
         for config_single_source in config:
-            featurizer=MyElementProperty(data_source=data_source, features=config_single_source["feature"], stats=config_single_source["stat"], config=config_single_source)
+            print(f"start featurize {len(config_single_source["feature"])*len(config_single_source["stat"])} features: {config_single_source}")
+            featurizer=MyElementProperty(data_source=data_source, features=config_single_source["feature"],
+                                         stats=config_single_source["stat"], config=config_single_source)
+            featurizer.set_n_jobs(self.config['n_jobs'])
             featurizer.featurize_dataframe(featurized_df, col_id = comps_col, inplace=True)
         return featurized_df
     
@@ -399,7 +411,8 @@ class MultiSourceFeaturizer():
     def featurize_all(self,
                       df: pd.DataFrame,
                       featurized_df: pd.DataFrame = None,
-                      save_file: str = None,) -> pd.DataFrame:
+                      save_file: str = None,
+                      merge_both: str = False) -> pd.DataFrame:
         """featurize dataframe
 
         arguments:
@@ -411,7 +424,7 @@ class MultiSourceFeaturizer():
         return:
             * featurized_df: 
         """
-        featurized_df = df[["comps_pymatgen"]]
+        featurized_df = df[["comps_pymatgen"]].copy(deep=False)
         for src in self.config["sources"]:
             if src in ("matminer", "matminer_expanded"):
                 featurized_df = self.featurize_matminer(featurized_df, config=self.config[src], impute_nan=False)
@@ -424,8 +437,14 @@ class MultiSourceFeaturizer():
         featurized_df.drop(columns=["comps_pymatgen"], inplace=True)
         assert featurized_df.shape == (len(df), len(self.col_names))
 
+        # replace matminer column names to stored ones..
+        featurized_df=featurized_df.rename(columns=dict(zip(featurized_df.columns.tolist(), self.col_names)))
+
         # save featurized_df
         if save_file is not None:
+            if merge_both:
+                featurized_df = merge_dfs(df, featurized_df)
+
             if isinstance(save_file, str):
                 save_file = Path(save_file)
             assert not Path(save_file).is_dir(), NotImplementedError("save_file should be a file name")
@@ -433,8 +452,10 @@ class MultiSourceFeaturizer():
                 featurized_df.to_json(save_file, orient="table", indent=4, index=None)
             elif save_file.suffix == ".npz":
                 np.savez(save_file, featurized_df=featurized_df.to_numpy(), allow_pickle=False)
+            elif save_file.suffix == ".csv":
+                featurized_df.to_csv(save_file, index=None)
             else:
-                NotImplementedError("save_file should be a `*.npz` or `*.json` file path")
+                NotImplementedError("save_file should be a '.csv' or `*.npz` or `*.json` file path")
         return featurized_df
         
 
@@ -492,7 +513,7 @@ class CustomPropertyStats(PropertyStats):
                 pairs.append([da, db, pair_weight])
                 weights_sum += pair_weight
             for j, pair in enumerate(pairs):
-                pairs[j][2] = pair[2]/weights_sum
+                pairs[j][2] = 0.0 if weights_sum==0 else pair[2]/weights_sum
         elif weights is None:
             pairs = [(da, db) for da, db in combinations(data_lst, r=2)]
         else:
@@ -506,7 +527,10 @@ class CustomPropertyStats(PropertyStats):
         """
         assert weights_rule == "temp", NotImplementedError(weights_rule)
         # it is not defined for negative or near-zero values. 
-        assert all([d >= 0.0 for d in data_lst]), ValueError([d >= 0.0 for d in data_lst]) 
+        if all([d >= 0.0 for d in data_lst]):
+            pass
+        else:
+            warnings.warn(f"some elemental properties are negative. In this case, AP is not clearly defined. using |f_i-f_j|/(|f_i|+|f_j|) instead.")
         ap_out = []
         if len(data_lst)==1:
             return [0,], None #according to the definition of AP_{ij}
@@ -514,8 +538,8 @@ class CustomPropertyStats(PropertyStats):
             if weights is not None:
                 weight_out = []
                 for da, db, weight in CustomPropertyStats.iter_pair(data_lst, weights):
-                    out = np.abs(da-db)/np.mean((da, db))
-                    if np.isnan(out):
+                    out = np.abs(da-db)/np.mean((np.abs(da), np.abs(db)))
+                    if np.isnan(out) or (da==0.0 and db==0.0):
                         assert da==0.0 and db==0.0
                         out = 0.0
                     ap_out.append(out)
@@ -523,8 +547,8 @@ class CustomPropertyStats(PropertyStats):
                 return ap_out, weight_out
             else:
                 for da, db in CustomPropertyStats.iter_pair(data_lst, None):
-                    out = np.abs(da-db)/np.mean((da, db))
-                    if np.isnan(out):
+                    out = np.abs(da-db)/np.mean((np.abs(da), np.abs(db)))
+                    if np.isnan(out) or (da==0.0 and db==0.0):
                         assert da==0.0 and db==0.0
                         out = 0.0
                     ap_out.append(out)

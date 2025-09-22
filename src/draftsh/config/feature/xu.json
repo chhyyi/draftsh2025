@@ -3,10 +3,15 @@
         "matminer_expanded",
         "matminer_secondary"
     ],
+    "n_jobs": 1,
     "matminer_expanded": [
         {
             "src": "magpie",
             "feature": [
+                "Number",
+                "MendeleevNumber",
+                "AtomicWeight",
+                "MeltingT",
                 "Column",
                 "Row",
                 "CovalentRadius",
@@ -24,6 +29,8 @@
                 "FirstIonizationEnergy",
                 "GSestBCClatcnt",
                 "GSvolume_pa",
+                "GSbandgap",
+                "GSmagmom",
                 "SpaceGroupNumber"
             ],
             "stat": [
@@ -69,10 +76,6 @@
                 "mean",
                 "std_dev",
                 "avg_dev"
-            ],
-            "unweighted": [
-                "uw",
-                "w"
             ]
         },
         {
