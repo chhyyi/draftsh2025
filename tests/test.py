@@ -75,6 +75,18 @@ class Test(unittest.TestCase):
         #    print(f"test_almost_equal snapshot[{i}] and live[{i}]")
         #    assert_almost_equal(featurized_snapshot[i], featurized_np[i])
 
+        high_errors_feature_set = set(compare_as_dataframe(live_arrays=featurized_np, snapshot_arrays=featurized_snapshot,
+                             dataset=dataset, featurizer=featurizer,
+                             max_high_errors=(1979, 1, 622, 1),
+                             max_high_error_features_to_return=(1979, 1, 622, 1),
+                             assert_every_features_in_common=None))
+        
+        # compare values with snapshot
+        pd.testing.assert_frame_equal(dataset_snapshot_df, dataset.dataframe.drop(columns=["comps_pymatgen"]), check_exact=False)
+        for i in range(4):
+            print(f"test_almost_equal snapshot[{i}] and live[{i}]")
+            assert_almost_equal(featurized_snapshot[i], featurized_np[i])
+
         #xu_val_r2score: test XuDataset reproduces the snapshot
         xu_dataset = XuTestHEA()
         r2score = r2_score(xu_dataset.dataframe["Experimental_T_c(K)"], xu_dataset.dataframe["Predicted_T_c(K)"])
@@ -100,4 +112,3 @@ class Test(unittest.TestCase):
 if __name__ == '__main__':
     Test().test_dataset() #for debug
     #unittest.main()
-    # 
