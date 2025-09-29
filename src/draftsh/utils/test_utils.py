@@ -13,10 +13,10 @@ import numpy as np
 from pymatgen.core.composition import Composition
 
 from draftsh.dataset import Dataset
-from draftsh.feature import Featurizer, MyElementProperty
+from draftsh.feature import MultiSourceFeaturizer, MyElementProperty
 
 def specific_value(
-        live_data: list[np.array], snapshot: list[np.array], featurizer: Featurizer,
+        live_data: list[np.array], snapshot: list[np.array], featurizer: MultiSourceFeaturizer,
         comp: str = "Ru0.075Rh0.075Pd0.075Ir0.075Pt0.70Sb",
         specific_idx: tuple[int] = (0, 7, 28),
         source: str = "magpie", feature: list[str] = ["NpValence"],
@@ -41,8 +41,8 @@ def specific_value(
     found_col = 0
     if fixing_columns:
         if col_type == "matminer_expanded":
-            for idx, feat_col in enumerate(featurizer.col_names[col_type]):
-                if feat_col == f'{weight}_{feature[0]}_{stats[0]}':
+            for idx, feat_col in enumerate(featurizer.col_names):
+                if feat_col == f'{source}_{feature[0]}_{stats[0]}':
                     found_col = found_col+1
                     print(idx)
                     if idx!=specific_idx[2]:
@@ -75,10 +75,10 @@ def specific_value(
 
 def compare_as_dataframe(
         live_arrays: list[np.array], snapshot_arrays: list[np.array],
-        dataset: Dataset, featurizer: Featurizer,
+        dataset: Dataset, featurizer: MultiSourceFeaturizer,
         max_high_errors: tuple[int, int, int, int] = (10, 1, 10, 1),
         max_high_error_features_to_return: tuple[int, int, int, int] = (2, 1, 2, 1),
-        assert_every_features_in_common: str | None = None
+        assert_every_features_in_common: str = None
         ) -> list[str]:
     """compare as dataframe
 
@@ -96,7 +96,7 @@ def compare_as_dataframe(
         * assert_every_features_in_common: see below for details.
             * analyze features made error, run with old snapshots!
     
-    assert_every_features_in_common: str | None 
+    assert_every_features_in_common: Optional[str]
         * "mae_20250904"
             * What it does: 
                 * `assert all("mae" in col_names[i] for i \

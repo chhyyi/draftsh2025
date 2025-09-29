@@ -1,0 +1,4 @@
+{
+    "targets": ["max_Tc", "min_Tc", "avg_Tc"],
+    "exception_col": null
+}

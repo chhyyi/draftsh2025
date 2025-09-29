@@ -1,16 +1,17 @@
 {
     "sources": [
-        "matminer",
-        "xu_eight"
+        "matminer_expanded",
+        "matminer_secondary"
     ],
-    "matminer": [
+    "n_jobs": 1,
+    "matminer_expanded": [
         {
             "src": "magpie",
-            "unweighted": [
-                "uwd",
-                "wd"
-            ],
             "feature": [
+                "Number",
+                "MendeleevNumber",
+                "AtomicWeight",
+                "MeltingT",
                 "Column",
                 "Row",
                 "CovalentRadius",
@@ -28,44 +29,25 @@
                 "FirstIonizationEnergy",
                 "GSestBCClatcnt",
                 "GSvolume_pa",
+                "GSbandgap",
+                "GSmagmom",
                 "SpaceGroupNumber"
             ],
             "stat": [
-                "minimum",
-                "maximum",
-                "range",
-                "ap_mean",
-                "ap_minimum",
-                "ap_maximum",
-                "ap_range"
-            ]
-        },
-        {
-            "src": "magpie",
-            "unweighted": [
-                "wd"
-            ],
-            "feature": [
-                "Column",
-                "Row",
-                "CovalentRadius",
-                "Electronegativity",
-                "NsValence",
-                "NpValence",
-                "NdValence",
-                "NfValence",
-                "NValence",
-                "NsUnfilled",
-                "NpUnfilled",
-                "NdUnfilled",
-                "NfUnfilled",
-                "NUnfilled",
-                "FirstIonizationEnergy",
-                "GSestBCClatcnt",
-                "GSvolume_pa",
-                "SpaceGroupNumber"
-            ],
-            "stat": [
+                "minimum::uw",
+                "maximum::uw",
+                "range::uw",
+                "ap_mean::uw",
+                "ap_minimum::uw",
+                "ap_maximum::uw",
+                "ap_range::uw",
+                "minimum::w",
+                "maximum::w",
+                "range::w",
+                "ap_mean::w",
+                "ap_minimum::w",
+                "ap_maximum::w",
+                "ap_range::w",
                 "mean",
                 "std_dev",
                 "avg_dev"
@@ -77,66 +59,72 @@
                 "thermal_conductivity"
             ],
             "stat": [
-                "minimum",
-                "maximum",
-                "range",
-                "ap_mean",
-                "ap_minimum",
-                "ap_maximum",
-                "ap_range"
-            ],
-            "unweighted": [
-                "uwd",
-                "wd"
-            ]
-        },
-        {
-            "src": "pymatgen",
-            "feature": [
-                "thermal_conductivity"
-            ],
-            "stat": [
+                "minimum::uw",
+                "maximum::uw",
+                "range::uw",
+                "ap_mean::uw",
+                "ap_minimum::uw",
+                "ap_maximum::uw",
+                "ap_range::uw",
+                "minimum::w",
+                "maximum::w",
+                "range::w",
+                "ap_mean::w",
+                "ap_minimum::w",
+                "ap_maximum::w",
+                "ap_range::w",
                 "mean",
                 "std_dev",
                 "avg_dev"
-            ],
-            "unweighted": [
-                "wd"
             ]
         },
         {
-            "src": "bccfermi",
+            "src": "mast-ml",
             "feature": [
-                "bccfermi"
+                "BCCfermi"
             ],
             "stat": [
-                "minimum",
-                "maximum",
-                "range",
-                "ap_mean",
-                "ap_minimum",
-                "ap_maximum",
-                "ap_range"
-            ],
-            "unweighted": [
-                "uwd",
-                "wd"
-            ]
-        },
-        {
-            "src": "bccfermi",
-            "feature": [
-                "bccfermi"
-            ],
-            "stat": [
+                "minimum::uw",
+                "maximum::uw",
+                "range::uw",
+                "ap_mean::uw",
+                "ap_minimum::uw",
+                "ap_maximum::uw",
+                "ap_range::uw",
+                "minimum::w",
+                "maximum::w",
+                "range::w",
+                "ap_mean::w",
+                "ap_minimum::w",
+                "ap_maximum::w",
+                "ap_range::w",
                 "mean",
                 "std_dev",
                 "avg_dev"
-            ],
-            "unweighted": [
-                "wd"
             ]
         }
     ],
-    "xu_eight": true
+    "matminer_secondary": [
+        {
+            "src": "inhouse_secondary",
+            "feature": ["configurational_entropy"],
+            "stat": ["self_prop"]
+        },
+        {
+            "src": "inhouse_secondary",
+            "feature": [
+                "occu_ve_s",
+                "occu_ve_p",
+                "occu_ve_d",
+                "occu_ve_f"
+            ],
+            "stat": ["self_prop"],
+            "description": "Occupation states of valenece electron, shown in Table 2 of Xu, S. Predicting superconducting temperatures with new hierarchical neural network AI model. Front. Phys. 20, 14205 (2025)."
+        },
+        {
+            "src": "inhouse_secondary",
+            "feature": ["ionicity"],
+            "stat": ["self_prop::mean", "self_prop::max", "self_prop::bool"]
+        }
+    ]
 }

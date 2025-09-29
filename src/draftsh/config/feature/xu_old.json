@@ -1,0 +1,155 @@
+{
+    "sources": [
+        "matminer_expanded"
+    ],
+    "matminer_expanded": [
+        {
+            "src": "magpie",
+            "unweighted": [
+                "uw",
+                "w"
+            ],
+            "feature": [
+                "Column",
+                "Row",
+                "CovalentRadius",
+                "Electronegativity",
+                "NsValence",
+                "NpValence",
+                "NdValence",
+                "NfValence",
+                "NValence",
+                "NsUnfilled",
+                "NpUnfilled",
+                "NdUnfilled",
+                "NfUnfilled",
+                "NUnfilled",
+                "FirstIonizationEnergy",
+                "GSestBCClatcnt",
+                "GSvolume_pa",
+                "SpaceGroupNumber"
+            ],
+            "stat": [
+                "minimum",
+                "maximum",
+                "range",
+                "ap_mean",
+                "ap_minimum",
+                "ap_maximum",
+                "ap_range"
+            ]
+        },
+        {
+            "src": "magpie",
+            "unweighted": [
+                "w"
+            ],
+            "feature": [
+                "Column",
+                "Row",
+                "CovalentRadius",
+                "Electronegativity",
+                "NsValence",
+                "NpValence",
+                "NdValence",
+                "NfValence",
+                "NValence",
+                "NsUnfilled",
+                "NpUnfilled",
+                "NdUnfilled",
+                "NfUnfilled",
+                "NUnfilled",
+                "FirstIonizationEnergy",
+                "GSestBCClatcnt",
+                "GSvolume_pa",
+                "SpaceGroupNumber"
+            ],
+            "stat": [
+                "mean",
+                "std_dev",
+                "avg_dev"
+            ]
+        },
+        {
+            "src": "pymatgen",
+            "feature": [
+                "thermal_conductivity"
+            ],
+            "stat": [
+                "minimum",
+                "maximum",
+                "range",
+                "ap_mean",
+                "ap_minimum",
+                "ap_maximum",
+                "ap_range"
+            ],
+            "unweighted": [
+                "uw",
+                "w"
+            ]
+        },
+        {
+            "src": "pymatgen",
+            "feature": [
+                "thermal_conductivity"
+            ],
+            "stat": [
+                "mean",
+                "std_dev",
+                "avg_dev"
+            ],
+            "unweighted": [
+                "w"
+            ]
+        },
+        {
+            "src": "bccfermi",
+            "feature": [
+                "bccfermi"
+            ],
+            "stat": [
+                "minimum",
+                "maximum",
+                "range",
+                "ap_mean",
+                "ap_minimum",
+                "ap_maximum",
+                "ap_range"
+            ],
+            "unweighted": [
+                "uw",
+                "w"
+            ]
+        },
+        {
+            "src": "bccfermi",
+            "feature": [
+                "bccfermi"
+            ],
+            "stat": [
+                "mean",
+                "std_dev",
+                "avg_dev"
+            ],
+            "unweighted": [
+                "w"
+            ]
+        },
+        {
+            "src": "xu_eigth",
+            "feature": ["configurational_entropy"]
+        },
+        {
+            "src": "xu_eight",
+            "feature": ["occu_ve"],
+            "stat": ["p", "s", "d", "f"],
+            "description": "Occupation states of valenece electron, shown in Table 2 of Xu, S. Predicting superconducting temperatures with new hierarchical neural network AI model. Front. Phys. 20, 14205 (2025)."
+        },
+        {
+            "src": "xu_eight",
+            "feature": ["ionicity"],
+            "stat": ["mean", "maximum", "bool"]
+        }
+    ]
+}
