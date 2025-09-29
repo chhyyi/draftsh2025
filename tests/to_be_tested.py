@@ -25,15 +25,3 @@ if True:
 #if __name__ == "__main__":
 #    a = DLDataset(r"C:\Users\hms_l\OneDrive\projects\CWNU미팅\2025년8월\0829\250720 HESC dataset.xlsx")
 #    a.featurize_and_split()
-
-# %%
-#%% featurize_from_5cols_0922.py
-from draftsh.dataset import D2TableDataset
-from draftsh.feature import Featurizer, MultiSourceFeaturizer
-from draftsh.utils.utils import merge_dfs
-import pandas as pd
-dataset = D2TableDataset(r"C:\Users\chyi\draftsh2025\temp_devs\compositional5.csv", exception_col=None)
-dataset.pymatgen_comps()
-
-featurizer=MultiSourceFeaturizer(config="xu.json")
-featurized_df = featurizer.featurize_all(dataset.dataframe, merge_both=True, save_file="featurized_df_from_comb5cols_0922.csv")

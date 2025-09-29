@@ -6,7 +6,7 @@
             "ignore_elements":["H", "He", "C", "N", "O", "F", "Ne"]
         },
         "tc":{
-            "non_sc_observed": true,
+            "non_sc_observed": "old",
             "max": 50.0,
             "min": 0.0
         }
@@ -19,8 +19,6 @@
     "drop_cols_after_merge_duplicates":[
         "num_valid_tc"
     ],
-    "output_dir": "temp_devs/",
-    "save_compositional5_dir":"temp_devs/compositional5.csv",
-    "save_log_dir": "temp_devs/compositional5.log.json",
+    "dataset_config": "default_forward.json",
     "keep_merged_dataset_index": "idx_0918"
 }
