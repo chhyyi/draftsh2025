@@ -17,6 +17,7 @@ import ast
 import argparse
 import json
 from abc import abstractmethod
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
@@ -90,8 +91,16 @@ class TcMerger():
             
 
 class Converter():
-    def __init__(self, data_path, convert_config, test:bool = False) -> None:
+    def __init__(self, data_path, convert_config, test:bool = False, output_dir:str|None=None) -> None:
         self.config = config_parser(config=convert_config, mode="convert")
+        if self.config.get("output_dir") is not None and output_dir is not None:
+            raise NameError("two `output_dir` from config file and args")
+        else:
+            self.save_dir = Path(self.config.get("output_dir", output_dir))
+            self.save_compositional5_pth=self.save_dir.joinpath(
+                self.config.get("save_compositional5_dir", "compositional5.csv"))
+            self.save_log_pth=self.save_dir.joinpath(
+                self.config.get("save_log_dir", "compositional5.log.json"))
         self.log={} # temporal logging dict..
         self.log['command_line_args']={
             "data_path":data_path,
@@ -104,7 +113,6 @@ class Converter():
             self.dataset.pymatgen_duplicates(rtol=0.02)
             self.log["duplicated_comps"]=self.dataset.duplicated_comps_group
             self.dataset.add_duplicated_comps_column(criteria_rule=self.config['duplicates_rule'].get("criteria"))
-        self.save_dir = self.config.get('save_compositional5_dir')
         self.test = test
         self.converted_df: pd.DataFrame
 
@@ -119,9 +127,8 @@ class Converter():
             assert b["elements_fraction"].apply(lambda x: all(isinstance(i, (int, float)) for i in ast.literal_eval(x))).all()
             assert b.drop(columns=["elements", "elements_fraction"]).apply(lambda x: all(isinstance(i, float) for i in x)).all()
         elif self.save_dir is not None:
-            out_df.to_csv(self.save_dir, index=False)
-            if self.config.get('save_log_dir') is not None:
-                with open(self.config['save_log_dir'], 'w', encoding="utf-8") as f:
+            out_df.to_csv(self.save_compositional5_pth, index=False)
+            with open(self.save_log_pth, 'w', encoding="utf-8") as f:
                     json.dump(self.log, f, indent=4, ensure_ascii=False)
         else:
             self.converted_df = out_df
@@ -130,12 +137,19 @@ class Converter():
         config=self.config
         targets=dataset.config["targets"]
 
+        if config["exceptions"]["tc"]["non_sc_observed"]==True:
+            non_sc_rule="nan"
+        elif config["exceptions"]["tc"]["non_sc_observed"]=="old":
+            non_sc_rule="old"
+        else:
+            raise ValueError(config["exceptions"]["tc"]["non_sc_observed"])
+
         target_df = process_targets(
             df=dataset.dataframe,
             targets=targets,
             return_num_tcs=True,
             exception_row=None,
-            non_sc_rule='nan')
+            non_sc_rule=non_sc_rule)
         
         out_df = merge_dfs(target_df, dataset.dataframe.loc[:,config["keep_cols_from_dataset"]])
         if config.get("keep_merged_dataset_index") is not None:
@@ -216,7 +230,8 @@ class Converter():
         self.log["exceptions"]["shape(df)_after_tc_exceptions"]=out_df.shape
         return out_df
 
-COMMAND_LINE_ARGS=False
+#COMMAND_LINE_ARGS=False
+COMMAND_LINE_ARGS=True
 if __name__ == "__main__":
     if COMMAND_LINE_ARGS:
         parser = argparse.ArgumentParser(
@@ -232,4 +247,4 @@ if __name__ == "__main__":
     else:
         converter = Converter(r"C:\Users\chyi\draftsh2025\temp_devs\merged_dataset_forward.csv", "compositional5.json")
         converter.convert()
-# `python conversion path\to\merged_dataset_forward.xlsx compositional5_all_tc.json `
+# `python conversion.py path\to\merged_dataset_forward.xlsx compositional5_all_tc.json `

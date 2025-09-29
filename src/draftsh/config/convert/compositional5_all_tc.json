@@ -26,7 +26,8 @@
         "criteria": "single_ref"
     },
     "dataset_config": "default_forward.json",
-    "save_compositional5_dir": "temp_devs/compositional5_all_tc.csv",
-    "save_log_dir": "temp_devs/compositional5_all_tc.log.json",
+    "output_dir": "temp_devs/",
+    "save_compositional5_dir": "compositional5_all_tc.csv",
+    "save_log_dir": "compositional5_all_tc.log.json",
     "keep_merged_dataset_index": "idx_0918"
 }
